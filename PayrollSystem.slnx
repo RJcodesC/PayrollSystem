@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="PayrollSystem/PayrollSystem.csproj" />
+  <Project Path="PayrollSystemTests/PayrollSystemTests.csproj" />
+</Solution>
