@@ -1,0 +1,5 @@
+voices/*.onnx
+voices/*.bin
+cache/
+output/
+__pycache__/
