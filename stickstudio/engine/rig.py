@@ -66,6 +66,8 @@ class Look:
     height: float = 1.0
     width: float = 1.0
     belly: float = 0.0
+    stick: bool = False      # thin "pure stick" body (no coat), like classic stick-figure horror shorts
+    limb: str = None         # limb fill colour; None = solid ink. With a colour, limbs get an ink outline.
 
 
 def _v(angle_deg, face):
@@ -85,14 +87,18 @@ class Character:
         p1 = (p0[0] + dx * l1, p0[1] + dy * l1)
         dx, dy = _v(a2, face)
         p2 = (p1[0] + dx * l2, p1[1] + dy * l2)
-        ctx.set_source_rgb(*INK)
-        ctx.set_line_width(width)
         ctx.set_line_cap(1)  # round
         ctx.set_line_join(1)
-        ctx.move_to(*p0)
-        ctx.line_to(*p1)
-        ctx.line_to(*p2)
-        ctx.stroke()
+        passes = [(INK, width)]
+        if self.look.limb:
+            passes = [(INK, width + 9), (hexc(self.look.limb), width)]
+        for col, w in passes:
+            ctx.set_source_rgb(*col)
+            ctx.set_line_width(w)
+            ctx.move_to(*p0)
+            ctx.line_to(*p1)
+            ctx.line_to(*p2)
+            ctx.stroke()
         return p1, p2
 
     def _hand(self, ctx, p, r=12):
@@ -110,8 +116,15 @@ class Character:
         ctx.scale(1, 0.48)
         ctx.arc(face * 13, 0, 25, 0, 2 * math.pi)
         ctx.restore()
-        ctx.set_source_rgb(*INK)
-        ctx.fill()
+        if self.look.limb:
+            ctx.set_source_rgb(*hexc(self.look.limb))
+            ctx.fill_preserve()
+            ctx.set_source_rgb(*INK)
+            ctx.set_line_width(4)
+            ctx.stroke()
+        else:
+            ctx.set_source_rgb(*INK)
+            ctx.fill()
 
     # ------------------------------------------------------------------ pose
     def resolve(self, P, t):
@@ -180,7 +193,11 @@ class Character:
         self._hand(ctx, hand_b)
 
         # torso / coat
-        self._torso(ctx, hip, neck, face, lean)
+        if lk.stick:
+            self._limb(ctx, hip, 180 - lean, 0.001, 180 - lean, math.hypot(neck[0] - hip[0], neck[1] - hip[1]) + 4,
+                       face, LIMB_W + 4)
+        else:
+            self._torso(ctx, hip, neck, face, lean)
 
         # head
         hc = (neck[0] + tdx * (HEAD_R - 4), neck[1] + tdy * (HEAD_R - 4))

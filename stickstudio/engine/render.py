@@ -169,7 +169,11 @@ class Episode:
                     events.append((sc.start + lt, name, g))
             if sc.trans == "whip":
                 events.append((sc.start - 0.05, "whoosh", 0.7))
-        music = audio.music_caper(self.total) if self.music else None
+        music = None
+        if self.music == "caper":
+            music = audio.music_caper(self.total)
+        elif self.music == "horror":
+            music = audio.music_horror(self.total)
         out = audio.mix(self.total, clips, events, music)
         sf.write(path, out, audio.SR)
         return path
@@ -315,6 +319,17 @@ class Episode:
                         "-i", wav, "-c:v", "copy", "-af", "loudnorm=I=-14:TP=-1.5:LRA=11", "-ar", "48000",
                         "-c:a", "aac", "-b:a", "192k", "-shortest",
                         "-movflags", "+faststart", final], check=True)
+        # second pass: correct any loudness undershoot (common with quiet, dynamic mixes)
+        r = subprocess.run(["ffmpeg", "-i", final, "-af", "ebur128", "-vn", "-f", "null", "-"],
+                           capture_output=True, text=True).stderr
+        lufs = [float(x.split()[1]) for x in r.splitlines() if x.strip().startswith("I:")]
+        if lufs and abs(lufs[-1] + 14) > 1.0:
+            gain = -14 - lufs[-1]
+            tmp = final.replace(".mp4", "_tmp.mp4")
+            subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", final, "-c:v", "copy", "-af",
+                            f"volume={gain:.2f}dB,alimiter=limit=0.89", "-c:a", "aac", "-b:a", "192k",
+                            "-movflags", "+faststart", tmp], check=True)
+            os.replace(tmp, final)
         for s in segs:
             os.remove(s)
         os.remove(lst)

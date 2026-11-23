@@ -333,3 +333,90 @@ def mix(total, voice_clips, sfx_events, music=None, music_gain=0.32, duck=0.65):
         out += m * music_gain * (1 - duck * ve) * fade
     peak = np.max(np.abs(out)) + 1e-9
     return (out / peak * 0.89).astype(np.float32)
+
+
+# ------------------------------------------------------------------ horror kit
+def sfx_heartbeat(n=2):
+    out = []
+    for _ in range(n):
+        for f0, g in ((55, 1.0), (48, 0.7)):
+            t = _t(0.16)
+            out.append(np.sin(2 * np.pi * np.cumsum(f0 + 40 * np.exp(-t * 30)) / SR) * _env(len(t), 0.003, 0.05) * g)
+            out.append(np.zeros(int(0.09 * SR)))
+        out.append(np.zeros(int(0.35 * SR)))
+    return (np.concatenate(out) * 0.9).astype(np.float32)
+
+
+def sfx_buzz(d=0.5):
+    t = _t(d)
+    x = np.sign(np.sin(2 * np.pi * 120 * t)) * 0.5 + np.sin(2 * np.pi * 240 * t) * 0.3
+    gate = (np.random.default_rng(3).random(int(d * 40) + 1) > 0.35).repeat(int(SR / 40) + 1)[: len(t)]
+    return (x * gate * 0.12).astype(np.float32)
+
+
+def sfx_hit():
+    """Scare hit: low boom + dissonant cluster + noise burst."""
+    t = _t(1.6)
+    boom = np.sin(2 * np.pi * np.cumsum(70 * np.exp(-t * 3) + 30) / SR) * _env(len(t), 0.002, 0.5)
+    clus = sum(np.sin(2 * np.pi * f * t + i) for i, f in enumerate((311, 329.6, 349.2, 466, 493.9))) / 5
+    clus = clus * _env(len(t), 0.01, 0.6)
+    nz = np.convolve(_noise(len(t), 21), np.ones(5) / 5, "same") * _env(len(t), 0.001, 0.15)
+    return (boom * 0.9 + clus * 0.35 + nz * 0.5).astype(np.float32)
+
+
+def sfx_step_stone():
+    t = _t(0.18)
+    thump = np.sin(2 * np.pi * np.cumsum(90 * np.exp(-t * 25) + 60) / SR) * _env(len(t), 0.001, 0.04)
+    scuff = np.convolve(_noise(len(t), 31), np.ones(10) / 10, "same") * _env(len(t), 0.002, 0.03)
+    return (thump * 0.9 + scuff * 0.8).astype(np.float32)
+
+
+def sfx_creak():
+    t = _t(0.9)
+    f = 180 + 60 * np.sin(2 * np.pi * 1.3 * t) + 30 * np.sin(2 * np.pi * 17 * t)
+    x = np.sign(np.sin(2 * np.pi * np.cumsum(f) / SR)) * (np.random.default_rng(5).random(len(t)) > 0.4)
+    x = np.convolve(x, np.ones(20) / 20, "same")
+    return (x * np.sin(np.pi * t / 0.9) * 0.35).astype(np.float32)
+
+
+def sfx_glass():
+    """Glass smash: sharp noise crack + scattered high tinkles."""
+    t = _t(1.3)
+    nz = _noise(len(t), 41)
+    crack = (nz - np.convolve(nz, np.ones(6) / 6, "same")) * _env(len(t), 0.0005, 0.06) * 1.6
+    rng = np.random.default_rng(7)
+    tink = np.zeros_like(t)
+    for _ in range(26):
+        st = rng.uniform(0.02, 0.9)
+        f = rng.uniform(2500, 6500)
+        m = t >= st
+        tt = t[m] - st
+        tink[m] += np.sin(2 * np.pi * f * tt) * np.exp(-tt * rng.uniform(18, 40)) * rng.uniform(0.2, 0.6)
+    return (crack + tink * 0.5).astype(np.float32)
+
+
+SFX.update({"glass": sfx_glass, "heartbeat": sfx_heartbeat, "buzz": sfx_buzz, "hit": sfx_hit, "step": sfx_step_stone,
+            "creak": sfx_creak})
+
+
+def music_horror(total, seed=0):
+    """Original dark ambience: detuned low drone, slow swells, sparse high 'music box' notes."""
+    n = int(total * SR)
+    t = np.arange(n) / SR
+    drone = (np.sin(2 * np.pi * 55 * t) + np.sin(2 * np.pi * 55.7 * t) * 0.8 + np.sin(2 * np.pi * 82.4 * t) * 0.35
+             + np.sin(2 * np.pi * 77.8 * t) * 0.25)
+    swell = 0.55 + 0.45 * np.sin(2 * np.pi * t / 7.0 - 1.5)
+    air = np.convolve(_noise(n, seed + 1), np.ones(200) / 200, "same") * 3.0
+    out = drone * 0.22 * swell + air * 0.12
+    notes = [1318.5, 1174.7, 1046.5, 987.8, 1046.5, 880.0]
+    i = 0
+    for st in np.arange(2.0, total - 1, 2.6):
+        f = notes[i % len(notes)]
+        d = 1.4
+        tt = _t(d)
+        x = (np.sin(2 * np.pi * f * tt) + 0.3 * np.sin(2 * np.pi * f * 2.01 * tt)) * _env(len(tt), 0.002, 0.4)
+        a = int(st * SR)
+        x = x[: n - a]
+        out[a:a + len(x)] += x * 0.05
+        i += 1
+    return out.astype(np.float32)
