@@ -9,8 +9,9 @@ sys.path.insert(0, ROOT)
 from engine.render import qc  # noqa: E402
 
 
-def load(ep_dir):
-    path = os.path.join(ep_dir, "episode.py")
+def load(ep_path):
+    """ep_path: an episode .py file, or a folder containing episode.py"""
+    path = ep_path if ep_path.endswith(".py") else os.path.join(ep_path, "episode.py")
     spec = importlib.util.spec_from_file_location("episode", path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

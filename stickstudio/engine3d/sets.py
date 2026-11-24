@@ -155,7 +155,7 @@ def palette():
 
 
 # ------------------------------------------------------------------ sets
-def build_cell(sc, P, cam="wide"):
+def build_cell(sc, P, cam="wide", night=False):
     box((0, 0, -0.05), (3.2, 4.4, 0.1), P["floor"])
     box((0, 2.05, 1.5), (3.2, 0.1, 3.0), P["wall"])
     box((-1.55, 0, 1.5), (0.1, 4.4, 3.0), P["wall"])
@@ -177,10 +177,21 @@ def build_cell(sc, P, cam="wide"):
     array(g, 6, (0.06, 0, 0))
     for (x, z, r) in ((-0.67, 0.12, 0.03), (-0.25, 0.13, 0.025), (-0.23, 0.45, 0.02), (-0.65, 0.44, 0.02)):
         sphere((x, 1.97, z), r, P["crumble"], scale=(1.4, 0.6, 1))
-    light("POINT", (0, 0.8, 2.7), 70, (1.0, 0.85, 0.65), size=0.15)
-    light("AREA", (0, 2.3, 2.3), 140, (0.55, 0.65, 1.0), rot=(R(-70), 0, 0), size=0.6)
-    world((0.06, 0.06, 0.08), 0.6)
-    if cam == "vent":
+    if night:  # lights out: cold moonlight through the window + faint corridor spill
+        light("AREA", (0, 2.3, 2.4), 260, (0.45, 0.55, 1.0), rot=(R(-60), 0, 0), size=0.5)
+        light("AREA", (0, -2.6, 2.0), 40, (0.5, 0.55, 0.8), rot=(R(70), 0, 0), size=2.0)
+        world((0.01, 0.012, 0.02), 0.3)
+    else:
+        light("POINT", (0, 0.8, 2.7), 70, (1.0, 0.85, 0.65), size=0.15)
+        light("AREA", (0, 2.3, 2.3), 140, (0.55, 0.65, 1.0), rot=(R(-70), 0, 0), size=0.6)
+        world((0.06, 0.06, 0.08), 0.6)
+    # a pillow so the bed reads from above
+    box((1.05, 1.65, 0.66), (0.6, 0.35, 0.1), P["sheet"], bevel=0.04)
+    if cam == "med":
+        camera((-0.1, -1.0, 1.05), (R(88), 0, R(-4)), lens=26)
+    elif cam == "bed":
+        camera((0.6, 0.3, 2.6), (R(28), 0, R(-25)), lens=24)
+    elif cam == "vent":
         camera((-0.3, 1.0, 0.36), (R(92), 0, R(9)), lens=24)
     else:
         camera((0, -2.9, 1.25), (R(88), 0, 0), lens=22)
@@ -299,7 +310,39 @@ def build_corridor(sc, P):
     camera((0, -0.8, 1.4), (R(84), 0, 0), lens=18)
 
 
+def build_roof(sc, P):
+    """Cellhouse roof at night: tar roof, vent hatch, chimney stacks, the bay and city lights beyond."""
+    roofm = mat("roofm", (0.18, 0.18, 0.2), 0.8)
+    box((0, 10, -0.1), (14, 26, 0.2), roofm, bevel=0)
+    box((0, 23, -0.6), (14.5, 0.4, 1.2), roofm, bevel=0)
+    vent = mat("venthood", (0.45, 0.47, 0.5), 0.4, metal=0.6)
+    box((-1.6, 3.5, 0.45), (1.2, 1.2, 0.9), vent)
+    box((-1.6, 3.5, 0.95), (1.4, 1.4, 0.1), vent)
+    for (x, y) in ((3.5, 9), (-4.5, 14), (2.0, 17)):
+        box((x, y, 1.2), (0.8, 0.8, 2.4), mat("brick%d" % int(x), (0.5, 0.3, 0.25), 0.9,
+                                                  brick=((0.5, 0.3, 0.24), (0.42, 0.25, 0.2), (0.3, 0.28, 0.26), 4.0)))
+    water = mat("bay", (0.02, 0.05, 0.12), 0.1)
+    bpy.ops.mesh.primitive_plane_add(size=600, location=(0, 0, -12))
+    bpy.context.object.data.materials.append(water)
+    city = mat("city", (1, 0.8, 0.5), 1, emit=((1.0, 0.75, 0.45), 8))
+    import random
+    rng = random.Random(2)
+    for i in range(70):
+        box((rng.uniform(-80, 80), rng.uniform(170, 200), -11 + rng.uniform(0, 6)), (0.6, 0.6, 0.6), city, bevel=0)
+    sphere((25, 220, 60), 6, mat("moon2", (1, 0.96, 0.8), 1, emit=((1, 0.95, 0.85), 10)))
+    world((0.03, 0.05, 0.12), 1.0, top=(0.01, 0.01, 0.04))
+    light("SUN", (0, 0, 20), 0.6, (0.6, 0.7, 1.0), rot=(R(60), 0, R(200)))
+    light("SPOT", (6, 20, 6), 2500, (1, 0.95, 0.8), rot=(R(60), 0, R(150)), size=0.3)
+    camera((0.5, -3.2, 1.5), (R(84), 0, R(-3)), lens=22)
+
+
 SETS = {
+    "cell_med": lambda sc, P: build_cell(sc, P, "med"),
+    "cell_bed": lambda sc, P: build_cell(sc, P, "bed"),
+    "cell_night": lambda sc, P: build_cell(sc, P, "wide", night=True),
+    "cell_night_med": lambda sc, P: build_cell(sc, P, "med", night=True),
+    "cell_night_bed": lambda sc, P: build_cell(sc, P, "bed", night=True),
+    "roof": build_roof,
     "cell": lambda sc, P: build_cell(sc, P, "wide"),
     "vent": lambda sc, P: build_cell(sc, P, "vent"),
     "cellblock": build_cellblock,
@@ -307,7 +350,8 @@ SETS = {
     "messhall": build_messhall,
     "corridor": build_corridor,
 }
-EXPOSURE = {"island": 0.0, "corridor": 0.4, "cellblock": -0.2, "messhall": -0.3, "cell": -0.3, "vent": 0.2}
+EXPOSURE = {"cell_med": -0.3, "cell_bed": -0.3, "cell_night": 0.6, "cell_night_med": 0.6, "cell_night_bed": 0.6,
+            "roof": 0.8, "island": 0.0, "corridor": 0.4, "cellblock": -0.2, "messhall": -0.3, "cell": -0.3, "vent": 0.2}
 
 if __name__ == "__main__":
     args = sys.argv[1:]
