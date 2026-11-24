@@ -68,6 +68,7 @@ class Look:
     belly: float = 0.0
     stick: bool = False      # thin "pure stick" body (no coat), like classic stick-figure horror shorts
     limb: str = None         # limb fill colour; None = solid ink. With a colour, limbs get an ink outline.
+    style: str = "classic"   # "ricks": white head, solid black oval eyes, thin limbs, nub hands, capsule torso
 
 
 def _v(angle_deg, face):
@@ -83,6 +84,8 @@ class Character:
 
     # ------------------------------------------------------------------ helpers
     def _limb(self, ctx, p0, a1, l1, a2, l2, face, width):
+        if self.look.style == "ricks" and width == LIMB_W:
+            width = 6.5
         dx, dy = _v(a1, face)
         p1 = (p0[0] + dx * l1, p0[1] + dy * l1)
         dx, dy = _v(a2, face)
@@ -102,6 +105,11 @@ class Character:
         return p1, p2
 
     def _hand(self, ctx, p, r=12):
+        if self.look.style == "ricks":
+            ctx.arc(p[0], p[1], 8.5, 0, 2 * math.pi)
+            ctx.set_source_rgb(*INK)
+            ctx.fill()
+            return
         ctx.arc(p[0], p[1], r, 0, 2 * math.pi)
         ctx.set_source_rgb(*hexc(self.look.skin))
         ctx.fill_preserve()
@@ -114,7 +122,7 @@ class Character:
         ctx.translate(p[0], p[1])
         ctx.rotate(math.radians(-ang * 0.35) * face)
         ctx.scale(1, 0.48)
-        ctx.arc(face * 13, 0, 25, 0, 2 * math.pi)
+        ctx.arc(face * 11, 0, 18 if self.look.style == "ricks" else 25, 0, 2 * math.pi)
         ctx.restore()
         if self.look.limb:
             ctx.set_source_rgb(*hexc(self.look.limb))
@@ -218,6 +226,8 @@ class Character:
 
     def _torso(self, ctx, hip, neck, face, lean):
         lk = self.look
+        if lk.style == "ricks":
+            return self._torso_capsule(ctx, hip, neck, face)
         ax = (neck[0] - hip[0], neck[1] - hip[1])
         L = math.hypot(*ax)
         ux, uy = ax[0] / L, ax[1] / L
@@ -306,6 +316,60 @@ class Character:
             ctx.set_line_width(2.5)
             ctx.stroke()
 
+    def _torso_capsule(self, ctx, hip, neck, face):
+        """Bean/capsule body in flat clothing colour with a bold outline."""
+        lk = self.look
+        ax = (neck[0] - hip[0], neck[1] - hip[1])
+        L = math.hypot(*ax)
+        ux, uy = ax[0] / L, ax[1] / L
+        w = 40 * lk.width + lk.belly * 14
+        a = (hip[0] - ux * 8, hip[1] - uy * 8)
+        b = (neck[0] - ux * (w - 4), neck[1] - uy * (w - 4))
+        ctx.set_line_cap(1)
+        for col, lw in ((INK, 2 * w + 13), (hexc(lk.coat), 2 * w)):
+            ctx.set_source_rgb(*col)
+            ctx.set_line_width(lw)
+            ctx.move_to(*a)
+            ctx.line_to(*b)
+            ctx.stroke()
+        # soft shading on the back half
+        ctx.save()
+        ctx.set_source_rgba(*hexc(lk.coat_dark), 0.55)
+        ctx.set_line_width(w * 0.7)
+        px, py = -uy * face, ux * face
+        ctx.move_to(a[0] - px * w * 0.55, a[1] - py * w * 0.55)
+        ctx.line_to(b[0] - px * w * 0.55, b[1] - py * w * 0.55)
+        ctx.stroke()
+        ctx.restore()
+        dn = (-ux, -uy)
+        top = (neck[0] - ux * 6, neck[1] - uy * 6)
+        if lk.tie:
+            px, py = -uy, ux
+            ctx.move_to(top[0] - px * 7, top[1] - py * 7)
+            ctx.line_to(top[0] + px * 7, top[1] + py * 7)
+            ctx.line_to(top[0] + dn[0] * 52 + px * 8, top[1] + dn[1] * 52 + py * 8)
+            ctx.line_to(top[0] + dn[0] * 62, top[1] + dn[1] * 62)
+            ctx.line_to(top[0] + dn[0] * 52 - px * 8, top[1] + dn[1] * 52 - py * 8)
+            ctx.close_path()
+            ctx.set_source_rgb(*hexc(lk.tie))
+            ctx.fill_preserve()
+            ctx.set_source_rgb(*INK)
+            ctx.set_line_width(3.5)
+            ctx.stroke()
+        for f in (0.45, 0.7):
+            bx, by = lerp(a[0], b[0], 1 - f), lerp(a[1], b[1], 1 - f)
+            ctx.arc(bx, by, 4.5, 0, 2 * math.pi)
+            ctx.set_source_rgb(*INK)
+            ctx.fill()
+        if lk.badge:
+            bx, by = lerp(a[0], b[0], 0.75), lerp(a[1], b[1], 0.75)
+            _star(ctx, bx - 18 * face, by, 12, 5.5)
+            ctx.set_source_rgb(*hexc("#f2c84b"))
+            ctx.fill_preserve()
+            ctx.set_source_rgb(*INK)
+            ctx.set_line_width(2.5)
+            ctx.stroke()
+
     def _head(self, ctx, hc, P, t, face, mouth_open):
         lk = self.look
         r = HEAD_R
@@ -318,11 +382,12 @@ class Character:
         ctx.rotate(math.radians(P["tilt"] + P["lean"] * 0.3) * face)
         ctx.scale(face, 1)
         # head
+        ricks = lk.style == "ricks"
         ctx.arc(0, 0, r, 0, 2 * math.pi)
-        ctx.set_source_rgb(*hexc(lk.skin))
+        ctx.set_source_rgb(*((1, 1, 1) if ricks else hexc(lk.skin)))
         ctx.fill_preserve()
         ctx.set_source_rgb(*INK)
-        ctx.set_line_width(OUTLINE)
+        ctx.set_line_width(7.5 if ricks else OUTLINE)
         ctx.stroke()
         # hair
         if lk.hair == "tuft":
@@ -355,7 +420,33 @@ class Character:
         er = 19 * eye_s
         lookx = P["look"] * 7 + 3
         looky = P["lookY"] * 6
-        for i, (x, y) in enumerate(pos):
+        dot_eyes = ricks and P["expr"] not in ("shock", "excited", "greedy", "worried")
+        for i, (x, y) in enumerate(pos if dot_eyes else []):
+            ex, ey = x + lookx * 0.9, y + 4 + looky
+            if P["expr"] in ("smile", "grin", "wink") or (P["expr"] == "wink" and i == 1):
+                ctx.arc(ex, ey + 6, 11, math.radians(200), math.radians(340))  # happy crescent
+                ctx.set_source_rgb(*INK)
+                ctx.set_line_width(6)
+                ctx.stroke()
+                continue
+            open_h = 15 * eye_s * (1 - clamp(max(lid, blink)))
+            ctx.save()
+            ctx.translate(ex, ey)
+            if open_h < 2.5:
+                ctx.move_to(-9, 0)
+                ctx.line_to(9, 0)
+                ctx.set_source_rgb(*INK)
+                ctx.set_line_width(5)
+                ctx.stroke()
+            else:
+                ctx.scale(9.5 * eye_s, open_h)
+                ctx.arc(0, 0, 1, 0, 2 * math.pi)
+                ctx.restore()
+                ctx.save()
+                ctx.set_source_rgb(*INK)
+                ctx.fill()
+            ctx.restore()
+        for i, (x, y) in enumerate([] if dot_eyes else pos):
             if P["expr"] == "wink" and i == 1:
                 ctx.set_line_width(5)
                 ctx.set_source_rgb(*INK)
@@ -386,7 +477,7 @@ class Character:
                 ctx.arc(x + lookx + 2.5, y + looky - 3, 2.4 * pupil_s, 0, 2 * math.pi)
                 ctx.set_source_rgb(1, 1, 1)
                 ctx.fill()
-            if lid_amt > 0.01:
+            if lid_amt > 0.01 and not dot_eyes:
                 ctx.save()
                 ctx.arc(x, y, er + 1, 0, 2 * math.pi)
                 ctx.clip()
@@ -423,9 +514,10 @@ class Character:
             ctx.stroke()
         # brows
         ctx.set_source_rgb(*INK)
-        ctx.set_line_width(5.5)
-        for i, (x, y) in enumerate(pos):
-            by = y - er - 10 - brow_r
+        ctx.set_line_width(7 if ricks else 5.5)
+        show_brows = not (ricks and P["expr"] in ("neutral", "smile", "grin"))
+        for i, (x, y) in enumerate(pos if show_brows else []):
+            by = y - er - 10 - brow_r + (8 if dot_eyes else 0)
             sign = 1 if i == 0 else -1  # inner end is toward the middle
             a = math.radians(brow_a) * sign
             dx, dy = math.cos(a) * 14, math.sin(a) * 14

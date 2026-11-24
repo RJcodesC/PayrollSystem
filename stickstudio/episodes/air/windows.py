@@ -21,10 +21,10 @@ from engine.text import text_center  # noqa: E402
 PLATES = os.path.join(ROOT, "assets", "plates", "air")
 _pl = {}
 
-PASS = Character("passenger", Look(coat="#3f8f5c", coat_dark="#2c6a43", tie="#e8c547", hat="bowler",
+PASS = Character("passenger", Look(style="ricks", coat="#3f8f5c", coat_dark="#2c6a43", tie="#e8c547", hat="bowler",
                                     hat_color="#3a2a20"), seed=0.7)
-ENG = Character("engineer", Look(coat="#f2f2ee", coat_dark="#c9c9c2", hair="tuft", glasses=True, tie="#2f6fe0"), seed=2.1)
-ENG2 = Character("engineer2", Look(coat="#f2f2ee", coat_dark="#c9c9c2", mustache="thick", hair="side"), seed=3.7)
+ENG = Character("engineer", Look(style="ricks", coat="#f2f2ee", coat_dark="#c9c9c2", hair="tuft", glasses=True, tie="#2f6fe0"), seed=2.1)
+ENG2 = Character("engineer2", Look(style="ricks", coat="#f2f2ee", coat_dark="#c9c9c2", mustache="thick", hair="side"), seed=3.7)
 BIG = 2.7
 
 
@@ -248,6 +248,15 @@ def paperclip(ctx, x, y, bend, broken=0.0, s=1.0):
     ctx.restore()
 
 
+def line_idx(f):
+    """Index of the line currently being spoken (for hard cuts between sentences)."""
+    k = 0
+    for i, ln in enumerate(f.scene.lines):
+        if f.t >= ln.start - 0.05:
+            k = i
+    return k
+
+
 # ---------------------------------------------------------------- shots
 def s1(f):  # square windows
     plate(f.ctx, "windows_square")
@@ -288,22 +297,26 @@ def o3(f):
 
 
 def c3(f):
-    return dict(z=tween(f.t, 0, f.dur, 1.7, 1.45), x=tween(f.t, 0, f.dur, 500, 560), y=880)
+    if line_idx(f) == 0:
+        return dict(z=tween(f.t, 0, 1.5, 2.2, 2.0), x=380, y=880)
+    return dict(z=tween(f.t, 1.5, f.dur, 1.45, 1.3), x=560, y=880)
 
 
 def s4(f):  # passengers loved it
     c, t = f.ctx, f.t
     plate(c, "cabin_square")
-    tl = f.T.word(1, "loved")
+    tl = f.T.word(1, "love")
     p = dict(x=520, y=2150, s=BIG, face=1, expr="grin" if t > tl else "smile", fa=110, fb=40,
              tilt=6 * math.sin(f.gt * 2))
     pts = char(f, PASS, **p)
     drink(c, *wpt(p, pts["hand_f"]))
-    bubble(c, "So fancy!", 760, 560, f.r(tl, tl + 0.2))
+    bubble(c, "So fancy!", 690, 560, f.r(tl, tl + 0.2))
 
 
 def c4(f):
-    return dict(z=1.0, y=980)
+    if line_idx(f) == 0:
+        return dict(z=tween(f.t, 0, f.dur, 1.0, 1.05), y=980)
+    return dict(z=1.6, x=520, y=640)
 
 
 def s5(f):  # 1954, two broke apart
@@ -366,7 +379,9 @@ def s7(f):  # stumped -> crazy idea
 
 
 def c7(f):
-    return dict(z=1.0, y=980)
+    if line_idx(f) == 0:
+        return dict(z=1.0, y=980)
+    return dict(z=1.45, x=420, y=760)
 
 
 def s8(f):  # sank a whole plane
@@ -496,6 +511,18 @@ def s12(f):  # balloon & flow
         flow_panel(c, 540, 1160, 760, 420, "round", f.gt, a=80)
 
 
+def c12(f):
+    if line_idx(f) == 0:
+        return dict(z=tween(f.t, 0, 2.0, 1.4, 1.3), y=620)
+    return dict(z=1.25, y=1160)
+
+
+def c13(f):
+    if line_idx(f) == 0:
+        return dict(z=1.35, y=600)
+    return dict(z=1.35, y=1170, shake=5 * pulse(f.t, f.T.word(1, "piles"), 0.3))
+
+
 def s13(f):  # round vs square
     c, t = f.ctx, f.t
     blueprint(c)
@@ -514,17 +541,23 @@ def s14(f):  # paperclip analogy
     char(f, ENG, x=540, y=2150, s=BIG, face=1, expr="thinking" if t < tsnap else "shock", fa=60, fb=50, ba=60, bb=50)
     speed = 3 if t < t1000 else 14
     bend = 50 * math.sin(f.gt * speed) if t < tsnap else 0
-    paperclip(c, 560, 1180, bend, broken=f.r(tsnap, tsnap + 0.3), s=2.2)
+    paperclip(c, 560, 1330, bend, broken=f.r(tsnap, tsnap + 0.3), s=2.2)
     labels = [(f.T.word(0, "paperclip"), "x1"), (t1000, "x1,000")]
     for i, (tm, lab) in enumerate(labels):
         nxt = labels[i + 1][0] if i + 1 < len(labels) else tsnap
         if tm <= t < nxt:
-            pop_text(c, lab, 540, 600, f.r(tm, tm + 0.15), size=120, color="#ffffff")
-    pop_text(c, "SNAP!", 540, 600, f.r(tsnap, tsnap + 0.15), size=150)
+            pop_text(c, lab, 540, 880, f.r(tm, tm + 0.15), size=110, color="#ffffff")
+    pop_text(c, "SNAP!", 760, 1150, f.r(tsnap, tsnap + 0.15), size=120)
 
 
 def c14(f):
-    return dict(z=1.0, y=980, shake=12 * pulse(f.t, f.T.word(2, "snap"), 0.3))
+    k = line_idx(f)
+    sh = 12 * pulse(f.t, f.T.word(2, "snap"), 0.3)
+    if k == 0:
+        return dict(z=1.0, y=980)
+    if k == 1:
+        return dict(z=1.3, x=540, y=1000, shake=sh)
+    return dict(z=1.55, x=560, y=1150, shake=sh)
 
 
 def s15(f):  # rounded the corners
@@ -572,49 +605,59 @@ OV = lambda f: ov(f)  # noqa: E731
 SCENES = [
     Scene("square", [N("Airplane windows used to be square.")], s1, c1, overlay=OV, pad=0.1,
           cues=lambda T: [(0.0, "whoosh", 0.5)]),
-    Scene("breakup", [N("Then two jets broke apart in the sky, and nobody could figure out why.")], s2, c2,
+    Scene("breakup", [N("Then two jets broke apart in the sky, and nobody knew why.")], s2, c2,
           overlay=OV, trans="punch", pad=0.2,
           cues=lambda T: [(T.word(0, "broke"), "hit", 1.0), (T.word(0, "why"), "dun", 0.6)]),
-    Scene("comet", [N("It was 1952.", spoken="It was nineteen fifty-two."),
-                    N("The de Havilland Comet was the world's first jet airliner.", gap=0.1)],
+    Scene("comet", [N("It's 1952."),
+                    N("The de Havilland Comet is the world's first jet airliner.", gap=0.1)],
           s3, c3, overlay=o3, trans="whip", pad=0.1,
           cues=lambda T: [(T.word(0, "1952"), "pop", 0.7), (T.word(1, "Comet"), "whoosh", 0.6)]),
-    Scene("loved", [N("It flew higher and faster than anything before it."), N("Passengers loved it.", gap=0.1)],
-          s4, c4, overlay=OV, trans="whip", pad=0.2, cues=lambda T: [(T.word(1, "loved"), "ding", 0.6)]),
-    Scene("1954", [N("But in 1954, two Comets broke apart in mid-air, just months apart.",
-                     spoken="But in nineteen fifty-four, two Comets broke apart in mid-air, just months apart.")],
+    Scene("loved", [N("Faster and higher than anything before it."), N("Passengers love it.", gap=0.1)],
+          s4, c4, overlay=OV, trans="whip", pad=0.2, cues=lambda T: [(T.word(1, "love"), "ding", 0.6)]),
+    Scene("1954", [N("Then in 1954, two Comets break apart in mid-air, months apart.")],
           s5, c5, overlay=OV, trans="flash", pad=0.1,
           cues=lambda T: [(T.word(0, "1954"), "dun", 0.7), (T.word(0, "two"), "stamp", 0.7),
                           (T.word(0, "two") + 0.35, "stamp", 0.7)]),
-    Scene("grounded", [N("Every Comet was grounded.")], s6, c6, overlay=OV, trans="cut", pad=0.3,
+    Scene("grounded", [N("Every Comet is grounded.")], s6, c6, overlay=OV, trans="cut", pad=0.3,
           cues=lambda T: [(T.word(0, "grounded") + 0.1, "stamp", 1.0)]),
-    Scene("stumped", [N("Engineers were stumped."), N("So they tried something crazy.", gap=0.1)], s7, c7,
+    Scene("stumped", [N("Engineers are stumped."), N("So they try something crazy.", gap=0.1)], s7, c7,
           overlay=OV, trans="whip", pad=0.1, cues=lambda T: [(T.word(1, "crazy"), "ding", 0.8)]),
-    Scene("tank", [N("They sank an entire airplane into a giant tank of water.")], s8, c8, overlay=o8,
-          trans="whip", pad=0.2, cues=lambda T: [(T.word(0, "water"), "waves", 0.9), (T.word(0, "sank"), "whoosh", 0.6)]),
-    Scene("pump", [N("Then they pumped it up and down, again and again, like thousands of flights.")], s9, c9,
+    Scene("tank", [N("They sink an entire airplane in a giant tank of water.")], s8, c8, overlay=o8,
+          trans="whip", pad=0.2, cues=lambda T: [(T.word(0, "water"), "waves", 0.9), (T.word(0, "sink"), "whoosh", 0.6)]),
+    Scene("pump", [N("Then pump it up and down, again and again, like thousands of flights.")], s9, c9,
           overlay=OV, trans="punch", pad=0.2,
           cues=lambda T: [(0.3 + k * 0.45, "tick", 1.0) for k in range(8)]),
-    Scene("crack", [N("Until, finally, a crack.")], s10, c10, overlay=OV, trans="flash", pad=0.2,
+    Scene("crack", [N("Until finally... a crack.")], s10, c10, overlay=OV, trans="flash", pad=0.2,
           cues=lambda T: [(T.word(0, "crack"), "hit", 1.0), (T.word(0, "crack"), "glass", 0.5)]),
     Scene("corner", [N("And it started at a corner.")], s11, c11, overlay=OV, trans="punch", pad=0.3,
           cues=lambda T: [(T.word(0, "corner"), "dun", 0.7)]),
-    Scene("balloon", [N("Up high, the cabin gets pumped up like a balloon."),
-                      N("That force has to flow around every window.", gap=0.1)], s12, overlay=OV, trans="whip",
+    Scene("balloon", [N("See, up high, the cabin puffs up like a balloon."),
+                      N("That force has to flow around every window.", gap=0.1)], s12, c12, overlay=OV, trans="whip",
           pad=0.2, cues=lambda T: [(T.word(0, "balloon"), "pop", 0.7), (T.word(1, "flow"), "whoosh", 0.5)]),
     Scene("flow", [N("Around a round hole, it flows smoothly."),
-                   N("But at a sharp corner, it all piles up in one tiny spot.", gap=0.1)], s13, overlay=OV,
+                   N("But at a sharp corner, it all piles up in one tiny spot.", gap=0.1)], s13, c13, overlay=OV,
           trans="cut", pad=0.2, cues=lambda T: [(T.word(1, "sharp"), "pop", 0.7), (T.word(1, "piles"), "dun", 0.7)]),
     Scene("paperclip", [N("It's like bending a paperclip."), N("Once is fine.", gap=0.1),
-                        N("Do it a thousand times, and snap.", gap=0.1)], s14, c14, overlay=OV, trans="whip",
+                        N("Do it a thousand times... snap.", gap=0.1)], s14, c14, overlay=OV, trans="whip",
           pad=0.3, cues=lambda T: [(T.word(2, "snap"), "hit", 0.9), (T.word(2, "snap"), "clink", 1.0)]),
     Scene("rounded", [N("So engineers rounded the corners.")], s15, c15, overlay=o15, trans="whip", pad=0.3,
           cues=lambda T: [(T.word(0, "rounded"), "reveal", 0.8)]),
-    Scene("payoff", [N("And that's why every airplane window you've ever looked through has round corners.")],
+    Scene("payoff", [N("That's why every plane window you've ever looked through has round corners.")],
           s16, c16, overlay=OV, trans="whip", pad=0.2, cues=lambda T: []),
     Scene("cta", [N("Next time you fly, check the corners.")], s17, c17, overlay=o17, trans="fade", pad=0.8,
           cues=lambda T: [(0.2, "ding", 0.6)]),
 ]
 
-EPISODE = Episode("airplane_windows", SCENES, narrator_voice="am_michael", speed=1.15, music="mystery",
-                  caption_y=1330)
+# Human narration (ElevenLabs "Liam" via vidIQ), one file per line, in script order.
+VOICE = os.path.join(ROOT, "assets", "voice", "airplane_windows")
+_i = 0
+for _sc in SCENES:
+    for _ln in _sc.lines:
+        _ln.audio = os.path.join(VOICE, f"line{_i:02d}.mp3")
+        _ln.gap = min(_ln.gap, 0.06)
+        _i += 1
+    if _sc is not SCENES[-1]:
+        _sc.pad = min(_sc.pad, 0.12)
+
+EPISODE = Episode("airplane_windows_v2", SCENES, music="caper", music_gain=0.14, caption_style="ricks",
+                  caption_y=1440, voice_tempo=1.1)

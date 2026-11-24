@@ -60,6 +60,18 @@ def tts(text, voice, speed=1.0, lang="en-us", pronounce=None):
     return trim(x)
 
 
+def load_voice(path, tempo=1.0):
+    """Decode any audio file (mp3/wav) to mono float32 at SR via ffmpeg, optionally sped up (pitch kept),
+    trimmed of edge silence."""
+    import subprocess
+    af = ["-af", f"atempo={tempo:.3f}"] if abs(tempo - 1.0) > 1e-3 else []
+    raw = subprocess.run(["ffmpeg", "-loglevel", "error", "-i", path, *af, "-ac", "1", "-ar", str(SR), "-f", "f32le",
+                          "-"], capture_output=True, check=True).stdout
+    x = np.frombuffer(raw, dtype=np.float32).copy()
+    peak = np.max(np.abs(x)) + 1e-9
+    return trim(x / peak * 0.9, thr=0.035, pad=0.02)
+
+
 def envelope(x, fps=30):
     """Per-video-frame mouth openness 0..1 from speech amplitude."""
     hop = SR // fps

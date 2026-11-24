@@ -64,7 +64,7 @@ def look_cam(loc, target, lens=30):
     return cam
 
 
-def sky_world(top=(0.10, 0.32, 0.85), bottom=(0.50, 0.72, 1.0), strength=1.2):
+def sky_world(top=(0.02, 0.18, 0.75), bottom=(0.35, 0.62, 1.0), strength=1.0):
     world(bottom, strength, top=top)
 
 
@@ -80,9 +80,11 @@ def clouds(n, area, z, rng, size=(3, 8)):
 def build_sky_plane(sc):
     rng = random.Random(3)
     jet((0, 0, 0), square=True)
-    clouds(14, ((-80, 80), (-40, 120)), -18, rng)
+    clouds(22, ((-90, 90), (-30, 140)), -16, rng, size=(4, 10))
+    clouds(6, ((40, 120), (60, 160)), 8, rng, size=(5, 12))
+    sphere((60, 140, 40), 7, mat("sun", (1, 0.95, 0.7), 1, emit=((1, 0.92, 0.6), 25)))
     sky_world()
-    light("SUN", (0, 0, 50), 4.0, (1, 0.97, 0.9), rot=(R(40), R(-30), R(20)))
+    light("SUN", (0, 0, 50), 5.0, (1, 0.93, 0.8), rot=(R(40), R(-30), R(20)))
     look_cam((-18, 8, -5), (0, 3.5, 0), lens=24)
 
 
@@ -98,7 +100,7 @@ def build_windows(sc, square=True):
 def build_cabin(sc, square=True):
     wall = mat("cabinwall", (0.93, 0.91, 0.86), 0.6)
     carpet = mat("carpet", (0.35, 0.18, 0.2), 0.9)
-    seat = mat("seat", (0.15, 0.32, 0.6), 0.7)
+    seat = mat("seat", (0.08, 0.30, 0.75), 0.7)
     sky = mat("cabsky", (0.6, 0.8, 1), 1, emit=((0.65, 0.82, 1.0), 6))
     box((0, 8, -0.05), (3.4, 20, 0.1), carpet, bevel=0)
     box((0, 8, 2.3), (3.4, 20, 0.1), wall, bevel=0)
@@ -113,35 +115,59 @@ def build_cabin(sc, square=True):
             for x in (0.75, 1.25):
                 box((side * x, y, 0.45), (0.45, 0.5, 0.15), seat)
                 box((side * x, y - 0.25, 0.85), (0.45, 0.1, 0.8), seat)
-    light("AREA", (0, 8, 2.2), 900, (1, 0.95, 0.85), size=3)
-    world((0.5, 0.6, 0.8), 0.6)
+    bins = mat("bins", (0.85, 0.83, 0.78), 0.5)
+    for side in (-1, 1):
+        box((side * 1.45, 8, 2.05), (0.55, 20, 0.35), bins)
+    light("AREA", (0, 8, 2.2), 500, (1, 0.93, 0.8), size=3)
+    for k in range(5):
+        light("SPOT", (2.6, 0.5 + k * 3.2, 1.6), 900, (1, 0.8, 0.55), rot=(0, R(-80), 0), size=0.2)
+    world((0.5, 0.6, 0.8), 0.5)
     camera((0, -1.2, 1.35), (R(88), 0, 0), lens=22)
 
 
 def build_hangar(sc):
-    floor = mat("hfloor", (0.45, 0.46, 0.48), 0.5)
-    wallm = mat("hwall", (0.55, 0.58, 0.55), 0.8)
+    floor = mat("hfloor", (0.42, 0.44, 0.47), 0.25)
+    wallm = mat("hwall", (0.25, 0.42, 0.55), 0.8)
     box((0, 20, -0.05), (60, 80, 0.1), floor, bevel=0)
     box((-30, 20, 12), (0.5, 80, 24), wallm, bevel=0)
     box((30, 20, 12), (0.5, 80, 24), wallm, bevel=0)
-    box((0, 60, 12), (60, 0.5, 24), wallm, bevel=0)
+    box((-20, 60, 12), (20, 0.5, 24), wallm, bevel=0)
+    box((20, 60, 12), (20, 0.5, 24), wallm, bevel=0)
+    box((0, 60, 20), (20, 0.5, 8), wallm, bevel=0)
+    box((0, 75, 8), (80, 0.5, 30), mat("outside", (0.6, 0.8, 1), 1, emit=((0.75, 0.88, 1.0), 6)), bevel=0)
+    rng = random.Random(8)
+    cols = [(0.85, 0.12, 0.1), (0.95, 0.75, 0.1), (0.1, 0.35, 0.8), (0.2, 0.6, 0.3)]
+    for i in range(14):
+        x, y = rng.choice([-1, 1]) * rng.uniform(17, 27), rng.uniform(-8, 50)
+        kind = i % 3
+        cm = mat("prop%d" % i, cols[i % 4], 0.5)
+        if kind == 0:
+            box((x, y, 0.6), (1.4, 0.8, 1.2), cm)  # toolbox
+        elif kind == 1:
+            cyl((x, y, 0.9), 0.55, 1.8, cm)  # oil drum
+        else:
+            box((x, y, 1.0), (2, 2, 2), mat("crate%d" % i, (0.6, 0.42, 0.22), 0.8))
+    lad = mat("ladder", (0.95, 0.75, 0.1), 0.5)
+    for x in (-14.5, -13.5):
+        box((x, 10, 3), (0.12, 0.12, 6), lad, rot=(R(-12), 0, 0))
     for k in range(7):
         box((0, k * 10 - 10, 24), (60, 0.6, 1.2), mat("truss%d" % k, (0.3, 0.32, 0.34), 0.5, metal=0.5), bevel=0)
     jet((-9, 22, 3.2), rot=R(18))
     jet((11, 34, 3.2), rot=R(-15))
-    light("AREA", (0, 20, 23), 30000, (1, 0.96, 0.88), size=30)
+    light("AREA", (0, 20, 23), 14000, (1, 0.93, 0.82), size=30)
+    light("SUN", (0, 80, 20), 4.0, (1, 0.9, 0.7), rot=(R(-60), 0, R(180)))
     world((0.6, 0.7, 0.85), 0.4)
     camera((1, -20, 4), (R(85), 0, 0), lens=22)
 
 
 def build_tank(sc):
     floor = mat("tfloor", (0.4, 0.4, 0.42), 0.6)
-    concrete = mat("concrete", (0.62, 0.6, 0.56), 0.9)
+    concrete = mat("concrete", (0.78, 0.72, 0.62), 0.9)
     water = bpy.data.materials.new("water")
     water.use_nodes = True
     nt = water.node_tree
     pb = nt.nodes["Principled BSDF"]
-    pb.inputs["Base Color"].default_value = (0.35, 0.7, 0.9, 1)
+    pb.inputs["Base Color"].default_value = (0.05, 0.55, 0.85, 1)
     pb.inputs["Roughness"].default_value = 0.08
     pb.inputs["Alpha"].default_value = 0.45
     box((0, 20, -0.05), (80, 80, 0.1), floor, bevel=0)
@@ -165,13 +191,14 @@ def build_tank(sc):
     pipe = mat("tpipe", (0.6, 0.15, 0.12), 0.4, metal=0.6)
     cyl((-10.5, 12, 1.2), 0.4, 8, pipe, rot=(R(90), 0, 0))
     box((-11, 8, 1.5), (2, 2, 3), mat("pump", (0.25, 0.45, 0.3), 0.5, metal=0.4))
-    light("AREA", (0, 22, 26), 40000, (1, 0.97, 0.9), size=30)
-    light("SUN", (0, 0, 30), 2.0, (1, 0.95, 0.85), rot=(R(45), R(25), 0))
+    light("AREA", (0, 22, 26), 18000, (1, 0.95, 0.85), size=30)
+    light("SUN", (0, 0, 30), 5.0, (1, 0.9, 0.72), rot=(R(40), R(30), R(20)))
     world((0.55, 0.65, 0.8), 0.5)
     look_cam((-6, 2, 16), (0, 24, 3), lens=20)
 
 
-EXPOSURE = {"sky_plane": -0.9, "windows_square": -0.9, "windows_round": -0.9, "hangar": -0.4, "tank": -0.5}
+EXPOSURE = {"sky_plane": -0.6, "windows_square": -0.7, "windows_round": -0.7, "hangar": -0.2, "tank": -0.3,
+            "cabin_square": -0.2, "cabin_round": -0.2}
 
 SETS = {
     "sky_plane": build_sky_plane,

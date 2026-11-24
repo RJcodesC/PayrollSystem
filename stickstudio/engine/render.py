@@ -18,10 +18,11 @@ from .text import text_center, text_width
 # ------------------------------------------------------------------ authoring types
 class Line:
     def __init__(self, text, speaker="narrator", voice=None, speed=None, gap=0.12, at=None, caption=True,
-                 spoken=None):
+                 spoken=None, audio=None):
         """text = caption text; spoken = what the TTS says if it should differ (numbers, names)."""
         self.text, self.speaker, self.voice, self.speed = text, speaker, voice, speed
         self.spoken = spoken or text
+        self.audio = audio  # optional pre-recorded voice file (e.g. ElevenLabs line)
         self.gap, self.at, self.caption = gap, at, caption
         self.start = self.end = 0.0
         self.words = []
@@ -89,7 +90,11 @@ class Frame:
 # ------------------------------------------------------------------ episode
 class Episode:
     def __init__(self, slug, scenes, narrator_voice="am_michael", voices=None, speed=1.0, outdir=None,
-                 music="caper", caption_y=1330, pronounce=None):
+                 music="caper", caption_y=1330, pronounce=None, caption_style="classic", music_gain=0.32,
+                 voice_tempo=1.0):
+        self.caption_style = caption_style
+        self.voice_tempo = voice_tempo
+        self.music_gain = music_gain
         self.pronounce = pronounce or {}
         self.slug, self.scenes = slug, scenes
         self.narrator_voice = narrator_voice
@@ -110,7 +115,10 @@ class Episode:
             for ln in sc.lines:
                 voice = ln.voice or (self.narrator_voice if ln.speaker == "narrator"
                                      else self.voices.get(ln.speaker, self.narrator_voice))
-                ln.clip = audio.tts(ln.spoken, voice, ln.speed or self.speed, pronounce=self.pronounce)
+                if ln.audio:
+                    ln.clip = audio.load_voice(ln.audio, self.voice_tempo)
+                else:
+                    ln.clip = audio.tts(ln.spoken, voice, ln.speed or self.speed, pronounce=self.pronounce)
                 st = ln.at if ln.at is not None else cur + ln.gap
                 ln.start, ln.end = st, st + len(ln.clip) / audio.SR
                 ln.words = [(w, ln.start + a, ln.start + b) for (w, a, b) in audio.word_times(ln.text, ln.clip)]
@@ -136,7 +144,8 @@ class Episode:
             cur.append(wd)
             txt = " ".join(x["w"] for x in cur)
             nxt = words[i + 1] if i + 1 < len(words) else None
-            brk = (len(cur) >= 3 or len(txt) >= 14 or wd["w"][-1] in ".,!?…:" or nxt is None
+            maxw = 2 if self.caption_style == "ricks" else 3
+            brk = (len(cur) >= maxw or len(txt) >= (12 if self.caption_style == "ricks" else 14) or wd["w"][-1] in ".,!?…:" or nxt is None
                    or nxt["line"] != wd["line"])
             if brk:
                 chunks.append(cur)
@@ -176,7 +185,7 @@ class Episode:
             music = audio.music_horror(self.total)
         elif self.music == "mystery":
             music = audio.music_mystery(self.total)
-        out = audio.mix(self.total, clips, events, music)
+        out = audio.mix(self.total, clips, events, music, music_gain=self.music_gain)
         sf.write(path, out, audio.SR)
         return path
 
@@ -239,6 +248,8 @@ class Episode:
         self.draw_captions(ctx, gt)
 
     def draw_captions(self, ctx, gt):
+        if self.caption_style == "ricks":
+            return self._draw_captions_ricks(ctx, gt)
         for ch in self.chunks:
             if ch["s"] <= gt < ch["e"]:
                 words = [w["w"].upper() for w in ch["words"]]
@@ -265,6 +276,24 @@ class Episode:
                         col = "#ffd84a" if active else "#bff0ff"
                     text_center(ctx, w, x, 0, size, col, stroke=17, anchor="left")
                     x += ww + space
+                ctx.restore()
+                break
+
+    def _draw_captions_ricks(self, ctx, gt):
+        """White sentence-case words, heavy black outline, 1-2 words, snappy 90%->105%->100% pop."""
+        for ch in self.chunks:
+            if ch["s"] <= gt < ch["e"]:
+                txt = " ".join(w["w"] for w in ch["words"])
+                size = 118
+                w = text_width(ctx, txt, size)
+                if w > 960:
+                    size *= 960 / w
+                p = clamp((gt - ch["s"]) / 0.1)
+                sc = 0.9 + 0.15 * math.sin(p * math.pi * 0.75) / math.sin(math.pi * 0.75) if p < 1 else 1.0
+                ctx.save()
+                ctx.translate(540, self.caption_y)
+                ctx.scale(sc, sc)
+                text_center(ctx, txt, 0, 0, size, "#ffffff", stroke=int(size * 0.24))
                 ctx.restore()
                 break
 
