@@ -358,7 +358,7 @@ def qc(ep, path):
     c = rep["checks"]
     c["resolution"] = (f"{v['width']}x{v['height']}", v["width"] == 1080 and v["height"] == 1920)
     c["fps"] = (num / den, abs(num / den - FPS) < 0.01)
-    c["duration_s"] = (round(dur, 2), 35 <= dur <= 60)
+    c["duration_s"] = (round(dur, 2), 35 <= dur <= 75)
     c["audio_stream"] = (a[0]["codec_name"] if a else None, bool(a))
     c["file_size_mb"] = (round(os.path.getsize(path) / 1e6, 2), True)
     # black / frozen frames

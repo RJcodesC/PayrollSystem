@@ -273,14 +273,8 @@ def s_frank(f):
     plate(c, "cell")
     tv = T.word(1, "vent")
     look_down = f.r(tv - 0.6, tv)
-    char(f, FRANK, x=620, y=1420, s=1.45, face=-1, expr="sly" if t > tv - 0.3 else "thinking",
+    char(f, FRANK, x=640, y=1450, s=1.7, face=-1, expr="sly" if t > tv - 0.3 else "thinking",
          look=-1, lookY=look_down * 1.0, tilt=-8 * look_down, fa=20, fb=120)
-    # glow on the vent
-    if t > tv - 0.2:
-        a = 0.5 + 0.3 * math.sin(f.gt * 8)
-        c.arc(268, 1365, 70, 0, 2 * math.pi)
-        c.set_source_rgba(1, 0.85, 0.3, 0.35 * a)
-        c.fill()
 
 
 def s_frank_ov(f):
@@ -357,16 +351,16 @@ def s_scrape_cam(f):
 def s_music(f):
     c, t, T = f.ctx, f.t, f.T
     plate(c, "cell")
-    ta = T.word(0, "accordion")
+    ta = T.word(1, "accordion")
     sq = 0.5 + 0.5 * math.sin(f.gt * 6) if t > ta - 0.3 else 0.5
-    p = dict(x=520, y=1420, s=1.45, face=1, expr="grin" if t > ta else "sly", fa=60, fb=-20, ba=60, bb=-20,
+    p = dict(x=500, y=1450, s=1.7, face=1, expr="grin" if t > ta else "sly", fa=60, fb=-20, ba=60, bb=-20,
              tilt=6 * math.sin(f.gt * 3))
     pts = char(f, FRANK, **p)
     hx, hy = world_pt(p, pts["hand_f"])
     if t > ta - 0.3:
         accordion(c, hx - 30, hy, sq)
         notes(c, hx - 60, hy - 120, f.gt)
-    tc = T.word(0, "cover")
+    tc = T.word(1, "cover")
     if t > tc:
         char(f, GUARD, x=tween(t, tc, tc + 0.6, 1300, 960), y=1450, s=1.35, face=-1,
              expr="smile", walk=1.4 if t < tc + 0.6 else 0, tilt=8 * math.sin(f.gt * 3))
@@ -381,11 +375,11 @@ def s_brothers(f):
     c, t, T = f.ctx, f.t, f.T
     plate(c, "cell")
     tb = T.word(0, "Anglin")
-    char(f, FRANK, x=360, y=1420, s=1.4, face=1, expr="smile", look=1)
+    char(f, FRANK, x=330, y=1450, s=1.6, face=1, expr="smile", look=1)
     for i, (ch, x0, x1) in enumerate(((JOHN, 1400, 700), (CLAR, 1500, 900))):
         st = tb + i * 0.2
         x = tween(t, st, st + 0.5, x0, x1, "out")
-        p = dict(x=x, y=1440 + i * 20, s=1.35, face=-1, expr="grin", fa=80, fb=40,
+        p = dict(x=x, y=1460 + i * 20, s=1.55, face=-1, expr="grin", fa=80, fb=40,
                  walk=1.8 if st < t < st + 0.5 else 0)
         pts = char(f, ch, **p)
         hx, hy = world_pt(p, pts["hand_f"])
@@ -437,7 +431,7 @@ def s_check(f):
     c.set_source_rgba(0.02, 0.03, 0.08, 0.55)
     c.fill()
     te = T.word(1, "empty")
-    gx = 160
+    gx = 280
     char(f, GUARD, x=gx, y=1520, s=1.45, face=1, expr="angry", look=1, fa=80, fb=-10)
     flashlight(c, 300, 1150, 900, 1250, f.r(0.2, 0.5))
     if t > te:
