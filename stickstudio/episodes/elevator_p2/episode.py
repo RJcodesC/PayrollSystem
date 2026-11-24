@@ -1,4 +1,4 @@
-"""The 3AM Elevator – Part 2 (viewers commented "break the glass" -> the key leads to the stairs).
+"""The 3AM Elevator – Part 3 (viewers commented "break the glass" -> the key leads to the stairs).
 Original interactive stick-figure horror (PG: suspense, no gore). Fiction."""
 import math
 import os
@@ -413,7 +413,7 @@ def header(ctx):
     ctx.set_source_rgba(0, 0, 0, 0.85)
     ctx.fill()
     text_center(ctx, "THE 3AM ELEVATOR", 540, 85, 70, "#ffffff")
-    text_center(ctx, "PART 2 · BREAK THE GLASS", 540, 170, 62, "#f2c84b")
+    text_center(ctx, "PART 3 · BREAK THE GLASS", 540, 170, 62, "#f2c84b")
 
 
 def rule_box(ctx, n, line1, line2, p):
@@ -713,11 +713,11 @@ SCENES = [
           s8_draw, s8_cam, overlay=lambda f: overlay_std(f, red=0.5), trans="flash",
           cues=lambda T: [(T.word(1, "Behind"), "heartbeat", 1.0), (T.word(1, "breathing"), "creak", 0.6)], pad=0.3),
     Scene("choice", [N("Keep climbing..."), N("or turn around?", gap=0.25),
-                     N("Comment A or B. The top comment decides Part 3.", gap=0.35)],
+                     N("Comment A or B. The top comment decides Part 4.", gap=0.35)],
           s9_draw, s9_cam, overlay=s9_over,
           cues=lambda T: [(T.word(0, "Keep"), "pop", 0.6), (T.word(1, "turn"), "pop", 0.6)]
           + [(0.3 + 1.75 * i, "heartbeat", 0.7) for i in range(4)], pad=1.2),
 ]
 
-EPISODE = Episode("elevator_part2", SCENES, narrator_voice="am_onyx", voices={"kid": "am_echo"},
+EPISODE = Episode("elevator_part3", SCENES, narrator_voice="am_onyx", voices={"kid": "am_echo"},
                   speed=1.0, music="horror", caption_y=1250)
