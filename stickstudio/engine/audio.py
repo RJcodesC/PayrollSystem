@@ -420,3 +420,77 @@ def music_horror(total, seed=0):
         out[a:a + len(x)] += x * 0.05
         i += 1
     return out.astype(np.float32)
+
+
+# ------------------------------------------------------------------ documentary / mystery kit
+def sfx_scrape(d=0.7, strokes=3):
+    t = _t(d)
+    nz = _noise(len(t), 51)
+    hi = nz - np.convolve(nz, np.ones(8) / 8, "same")
+    env = np.abs(np.sin(np.pi * strokes * t / d)) ** 1.5
+    grit = (np.random.default_rng(3).random(len(t)) > 0.97) * np.random.default_rng(4).standard_normal(len(t)) * 0.8
+    return ((hi * 0.5 + grit) * env * 0.5).astype(np.float32)
+
+
+def sfx_clink():
+    t = _t(0.5)
+    x = sum(np.sin(2 * np.pi * f * t) * a for f, a in ((2637, 1), (3951, 0.5), (5274, 0.3)))
+    return (x * _env(len(t), 0.001, 0.08) * 0.35).astype(np.float32)
+
+
+def sfx_accordion(d=2.0):
+    t = _t(d)
+    out = np.zeros_like(t)
+    notes = [(0.0, 261.6), (0.5, 329.6), (1.0, 392.0), (1.5, 329.6)]
+    for st, f in notes:
+        m = (t >= st) & (t < st + 0.5)
+        tt = t[m] - st
+        reed = sum(np.sign(np.sin(2 * np.pi * f * k * tt * (1 + 0.003 * k))) / k ** 1.3 for k in (1, 2, 3))
+        out[m] += reed * np.minimum(1, tt / 0.03) * np.minimum(1, (0.5 - tt) / 0.05)
+    out = np.convolve(out, np.ones(6) / 6, "same")
+    return (out * (1 + 0.1 * np.sin(2 * np.pi * 5 * t)) * 0.12).astype(np.float32)
+
+
+def sfx_waves(d=4.0):
+    t = _t(d)
+    nz = np.convolve(_noise(len(t), 61), np.ones(400) / 400, "same") * 14
+    swell = 0.5 + 0.5 * np.sin(2 * np.pi * t / 3.2) ** 2
+    return (nz * swell * np.minimum(1, t / 0.5) * np.minimum(1, (d - t) / 0.8) * 0.5).astype(np.float32)
+
+
+def sfx_tick():
+    t = _t(0.05)
+    return (np.sin(2 * np.pi * 1800 * t) * _env(len(t), 0.0005, 0.008) * 0.5).astype(np.float32)
+
+
+SFX.update({"scrape": sfx_scrape, "clink": sfx_clink, "accordion": sfx_accordion, "waves": sfx_waves,
+            "tick": sfx_tick})
+
+
+def music_mystery(total, bpm=92):
+    """Original documentary-mystery bed: soft pad chords, muted bass pulse, light clock ticks."""
+    n = int(total * SR)
+    out = np.zeros(n, np.float32)
+    beat = 60 / bpm
+    chords = [(110.0, 130.8, 164.8), (87.3, 110.0, 130.8), (98.0, 123.5, 146.8), (82.4, 103.8, 123.5)]  # Am F G E
+    bar = beat * 4
+    t_all = np.arange(n) / SR
+    for i, st in enumerate(np.arange(0, total, bar)):
+        a, b = int(st * SR), min(n, int((st + bar) * SR))
+        tt = t_all[a:b] - st
+        ch = chords[i % 4]
+        pad = sum(np.sin(2 * np.pi * f * 2 * tt) + 0.5 * np.sin(2 * np.pi * f * 4.01 * tt) for f in ch) / 6
+        env = np.minimum(1, tt / 0.6) * np.minimum(1, (bar - tt) / 0.4)
+        out[a:b] += (pad * env * 0.18).astype(np.float32)
+        for k in range(4):  # muted bass pulse on every beat
+            bs = int((st + k * beat) * SR)
+            if bs >= n:
+                break
+            bt = _t(0.35)
+            x = np.sin(2 * np.pi * ch[0] * bt) * _env(len(bt), 0.004, 0.09)
+            out[bs:bs + len(x)] += (x[: n - bs] * 0.35).astype(np.float32)
+    for st in np.arange(beat / 2, total, beat):  # quiet clock tick on off-beats
+        i = int(st * SR)
+        x = sfx_tick()[: n - i]
+        out[i:i + len(x)] += x * 0.25
+    return out

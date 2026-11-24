@@ -174,6 +174,8 @@ class Episode:
             music = audio.music_caper(self.total)
         elif self.music == "horror":
             music = audio.music_horror(self.total)
+        elif self.music == "mystery":
+            music = audio.music_mystery(self.total)
         out = audio.mix(self.total, clips, events, music)
         sf.write(path, out, audio.SR)
         return path
