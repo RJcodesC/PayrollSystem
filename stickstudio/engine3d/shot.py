@@ -97,6 +97,22 @@ def depth_material():
     return m
 
 
+def depth_pass(sc, vl, dmat, fname):
+    """Depth for haze: 1 sample, emission override, linear output, transparent sky."""
+    keep = (sc.cycles.samples, sc.cycles.use_denoising, sc.view_settings.view_transform,
+            sc.view_settings.look, sc.view_settings.exposure)
+    sc.cycles.samples, sc.cycles.use_denoising = 1, False
+    sc.view_settings.view_transform, sc.view_settings.exposure = "Standard", 0.0
+    sc.render.film_transparent = True
+    vl.material_override = dmat
+    sc.render.filepath = fname.replace(".png", "_depth.png")
+    bpy.ops.render.render(write_still=True)
+    vl.material_override = None
+    sc.render.film_transparent = False
+    (sc.cycles.samples, sc.cycles.use_denoising, sc.view_settings.view_transform,
+     sc.view_settings.look, sc.view_settings.exposure) = keep
+
+
 def main(spec_path):
     spec = json.load(open(spec_path))
     mod = importlib.import_module(spec.get("module", "sets_pirate"))
@@ -104,7 +120,11 @@ def main(spec_path):
     builder = mod.SETS[spec["set"]]
     builder(sc)
     strip_lights_and_cameras()
-    haze, haze_col = lighting(spec.get("light", "golden"))
+    preset = spec.get("light", "golden")
+    if preset in getattr(mod, "LIGHTS", {}):  # set modules may bring their own light rigs
+        haze, haze_col = mod.LIGHTS[preset]()
+    else:
+        haze, haze_col = lighting(preset)
     dmat = depth_material()
     vl = sc.view_layers[0]
     bpy.ops.object.camera_add()
@@ -140,20 +160,9 @@ def main(spec_path):
         else:
             sc.render.filepath = fname
             bpy.ops.render.render(write_still=True)
-            # depth pass for haze: 1 sample, emission override, linear output, transparent sky
-            keep = (sc.cycles.samples, sc.cycles.use_denoising, sc.view_settings.view_transform,
-                    sc.view_settings.look, sc.view_settings.exposure)
-            sc.cycles.samples, sc.cycles.use_denoising = 1, False
-            sc.view_settings.view_transform, sc.view_settings.exposure = "Standard", 0.0
-            sc.render.film_transparent = True
-            vl.material_override = dmat
-            sc.render.filepath = fname.replace(".png", "_depth.png")
-            bpy.ops.render.render(write_still=True)
-            vl.material_override = None
-            sc.render.film_transparent = False
-            (sc.cycles.samples, sc.cycles.use_denoising, sc.view_settings.view_transform,
-             sc.view_settings.look, sc.view_settings.exposure) = keep
             last_pose, last_file = pose, fname
+            if haze > 0:  # the depth pass only feeds the haze; skip it for indoor rigs without haze
+                depth_pass(sc, vl, dmat, fname)
         anchors = {}
         for name, val in spec.get("anchors", {}).items():
             if isinstance(val, dict):  # moving anchor: eased between keys

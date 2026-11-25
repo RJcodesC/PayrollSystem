@@ -506,3 +506,26 @@ def music_mystery(total, bpm=92):
         x = sfx_tick()[: n - i]
         out[i:i + len(x)] += x * 0.25
     return out
+
+
+def edge_voice(text, voice="en-US-ChristopherNeural", rate="-5%", pitch="-2Hz"):
+    """Free Microsoft Edge neural voice (edge-tts). Returns a cached mp3 path for Line(audio=...)."""
+    import hashlib
+    import subprocess
+    key = hashlib.sha1(f"{voice}|{rate}|{pitch}|{text}".encode()).hexdigest()[:16]
+    d = os.path.join(ROOT, "cache", "edge")
+    os.makedirs(d, exist_ok=True)
+    path = os.path.join(d, f"{key}.mp3")
+    if not (os.path.exists(path) and os.path.getsize(path) > 1000):
+        cmd = ["edge-tts", "--voice", voice, f"--rate={rate}", f"--pitch={pitch}", "--text", text,
+               "--write-media", path]
+        proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")
+        if proxy:
+            cmd[1:1] = ["--proxy", proxy]
+        for _ in range(3):
+            subprocess.run(cmd, capture_output=True)
+            if os.path.exists(path) and os.path.getsize(path) > 1000:
+                break
+        else:
+            raise RuntimeError(f"edge-tts failed for: {text}")
+    return path
