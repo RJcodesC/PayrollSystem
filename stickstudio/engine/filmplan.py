@@ -42,7 +42,7 @@ class FilmScene(Scene):
 
 
 # ---------------------------------------------------------------- rendering the 3D shots
-def render_shots(ep, workdir, fps=15, w=540, h=960, samples=8, only=None):
+def render_shots(ep, workdir, fps=15, w=540, h=960, samples=8, only=None, smooth=False):
     from .film import Shot
     os.makedirs(workdir, exist_ok=True)
     for sc in ep.scenes:
@@ -63,6 +63,12 @@ def render_shots(ep, workdir, fps=15, w=540, h=960, samples=8, only=None):
             subprocess.run([sys.executable, os.path.join(ROOT, "engine3d", "shot.py"), sp], check=True,
                            stdout=subprocess.DEVNULL)
             open(stamp, "w").write(key)
+        if smooth and not os.path.exists(os.path.join(d, "smooth.key")) or \
+                (smooth and open(os.path.join(d, "smooth.key")).read() != key):
+            from .film import bake_smooth
+            n_s = bake_smooth(d, fps)
+            print(f"[smooth] {sc.name}: {n_s} frames at 30 fps", flush=True)
+            open(os.path.join(d, "smooth.key"), "w").write(key)
         sc.shot = Shot(d, t0=sc.start)
 
 

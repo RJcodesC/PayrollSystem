@@ -15,6 +15,7 @@ W, H = 1080, 1920
 RIG_HEIGHT = 520.0  # rig height in pixels at scale 1 (feet to top of head)
 
 
+SMOOTH_FPS = 30
 SATURATION = 1.35
 CONTRAST = 0.18
 
@@ -35,6 +36,9 @@ class Shot:
         self.frames = self.proj["frames"]
         self.haze = self.proj.get("haze", {"amount": 0.0, "color": (1, 1, 1)})
         self._cache = {}
+        self.smooth_dir = os.path.join(directory, "smooth")
+        self.smooth = sorted(f for f in os.listdir(self.smooth_dir)) if os.path.isdir(self.smooth_dir) else []
+        self._scache = {}
 
     def _surface(self, fname):
         if fname in self._cache:
@@ -72,8 +76,25 @@ class Shot:
                 return i, i + 1, (lt - ts[i]) / (ts[i + 1] - ts[i])
         return 0, 0, 0.0
 
+    def _smooth_surface(self, i):
+        if i not in self._scache:
+            if len(self._scache) > 4:
+                self._scache.pop(next(iter(self._scache)))
+            self._scache[i] = cairo.ImageSurface.create_from_png(os.path.join(self.smooth_dir, self.smooth[i]))
+        return self._scache[i]
+
     def draw_bg(self, ctx, t):
-        """Paint the background for global time t (blending neighbouring 15 fps frames)."""
+        """Paint the background for global time t: smooth 30 fps frames if baked, else blend 15 fps frames."""
+        if self.smooth:
+            i = min(len(self.smooth) - 1, max(0, int(round((t - self.t0) * SMOOTH_FPS))))
+            sf = self._smooth_surface(i)
+            ctx.save()
+            ctx.scale(W / sf.get_width(), H / sf.get_height())
+            ctx.set_source_surface(sf, 0, 0)
+            ctx.get_source().set_filter(cairo.FILTER_GOOD)
+            ctx.paint()
+            ctx.restore()
+            return
         a, b, p = self._index(t)
         fa, fb = self.frames[a]["file"], self.frames[b]["file"]
         sa = self._surface(fa)
@@ -97,3 +118,23 @@ class Shot:
         x, y, hy = lerp("x") * W, lerp("y") * H, lerp("hy") * H
         scale = max(0.05, (y - hy) / RIG_HEIGHT)
         return x, y, scale
+
+
+def bake_smooth(directory, src_fps=15):
+    """Grade/haze every background frame once, then motion-interpolate (optical flow) to 30 fps."""
+    import subprocess
+    sh = Shot(directory)
+    seq = os.path.join(directory, "seq")
+    out = os.path.join(directory, "smooth")
+    os.makedirs(seq, exist_ok=True)
+    os.makedirs(out, exist_ok=True)
+    for i, fr in enumerate(sh.frames):
+        surf = sh._surface(fr["file"])
+        surf.write_to_png(os.path.join(seq, f"{i:05d}.png"))
+    for f in os.listdir(out):
+        os.remove(os.path.join(out, f))
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(src_fps), "-i",
+                    os.path.join(seq, "%05d.png"), "-vf",
+                    f"minterpolate=fps={SMOOTH_FPS}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1",
+                    os.path.join(out, "%05d.png")], check=True)
+    return len(os.listdir(out))

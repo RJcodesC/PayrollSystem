@@ -25,7 +25,8 @@ if __name__ == "__main__":
         sys.exit(0)
     prev = "--preview" in sys.argv
     render_shots(ep, os.path.join(ROOT, "cache", "shots", ep.slug + ("_prev" if prev else "")),
-                 fps=8 if prev else 15, w=270 if prev else 540, h=480 if prev else 960, samples=4 if prev else 8)
+                 fps=8 if prev else 15, w=270 if prev else 540, h=480 if prev else 960, samples=4 if prev else 8,
+                 smooth=not prev)
     print("checks (after render):")
     ok, res = run_checks(ep)
     if not ok:
