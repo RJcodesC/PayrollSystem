@@ -184,6 +184,288 @@ def build_course(sc):
 SETS = {"deck": build_deck, "sea": build_sea, "hold": build_hold, "course": build_course}
 EXPOSURE = {"deck": -0.5, "sea": -0.5, "hold": 0.6, "course": 0.3}
 
+# ====================================================================== v2: detailed, saturated sets
+def wood_mat(name, base=(0.55, 0.30, 0.12), dark=(0.32, 0.16, 0.06), scale=6.0, rough=0.6):
+    """Procedural wood grain: wave bands + noise between a light and a dark brown."""
+    m = bpy.data.materials.new(name)
+    m.use_nodes = True
+    nt = m.node_tree
+    bsdf = nt.nodes["Principled BSDF"]
+    bsdf.inputs["Roughness"].default_value = rough
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    wave = nt.nodes.new("ShaderNodeTexWave")
+    wave.inputs["Scale"].default_value = scale
+    wave.inputs["Distortion"].default_value = 1.2
+    wave.inputs["Detail"].default_value = 1.0
+    wave.bands_direction = "Y"
+    ramp = nt.nodes.new("ShaderNodeValToRGB")
+    ramp.color_ramp.elements[0].color = (*dark, 1)
+    ramp.color_ramp.elements[1].color = (*base, 1)
+    nt.links.new(tc.outputs["Object"], wave.inputs["Vector"])
+    nt.links.new(wave.outputs["Fac"], ramp.inputs["Fac"])
+    nt.links.new(ramp.outputs["Color"], bsdf.inputs["Base Color"])
+    return m
+
+
+def sail_mat(name, base=(0.98, 0.93, 0.80)):
+    m = bpy.data.materials.new(name)
+    m.use_nodes = True
+    nt = m.node_tree
+    bsdf = nt.nodes["Principled BSDF"]
+    bsdf.inputs["Roughness"].default_value = 0.9
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    wave = nt.nodes.new("ShaderNodeTexWave")
+    wave.inputs["Scale"].default_value = 4.0
+    ramp = nt.nodes.new("ShaderNodeValToRGB")
+    ramp.color_ramp.elements[0].position = 0.9
+    ramp.color_ramp.elements[0].color = (*base, 1)
+    ramp.color_ramp.elements[1].color = (base[0] * 0.8, base[1] * 0.75, base[2] * 0.6, 1)  # seams
+    nt.links.new(tc.outputs["Generated"], wave.inputs["Vector"])
+    nt.links.new(wave.outputs["Fac"], ramp.inputs["Fac"])
+    nt.links.new(ramp.outputs["Color"], bsdf.inputs["Base Color"])
+    return m
+
+
+def wavy_ocean(z=0.0, color=(0.0, 0.42, 0.72)):
+    bpy.ops.mesh.primitive_plane_add(size=600, location=(0, 120, z))
+    o = bpy.context.object
+    sub = o.modifiers.new("sub", "SUBSURF")
+    sub.subdivision_type = "SIMPLE"
+    sub.levels = sub.render_levels = 6
+    tex = bpy.data.textures.new("waves", "CLOUDS")
+    tex.noise_scale = 3.0
+    d = o.modifiers.new("disp", "DISPLACE")
+    d.texture = tex
+    d.strength = 0.6
+    water = mat("ocean2", color, 0.05)
+    o.data.materials.append(water)
+    bpy.ops.object.shade_smooth()
+    return o
+
+
+def helm(loc):
+    wm = wood_mat("helmwood", (0.62, 0.36, 0.14), (0.38, 0.2, 0.07), 10)
+    box((loc[0], loc[1], loc[2] + 0.5), (0.18, 0.18, 1.0), wm)
+    bpy.ops.mesh.primitive_torus_add(location=(loc[0], loc[1] - 0.15, loc[2] + 1.15), rotation=(R(90), 0, 0),
+                                     major_radius=0.42, minor_radius=0.04)
+    bpy.context.object.data.materials.append(wm)
+    for k in range(8):
+        a = k * math.pi / 4
+        cyl((loc[0], loc[1] - 0.15, loc[2] + 1.15), 0.025, 1.1, wm, rot=(R(90), a, 0), verts=8)
+
+
+def cannon2(loc, rot=0.0):
+    iron = mat("iron2", (0.06, 0.06, 0.07), 0.35, metal=0.85)
+    carr = wood_mat("carriage2", (0.55, 0.28, 0.1), (0.3, 0.14, 0.05), 8)
+    x, y, z = loc
+    c = math.cos(rot)
+    s_ = math.sin(rot)
+    box((x, y, z + 0.32), (0.75, 1.1, 0.35), carr, rot=(0, 0, rot))
+    cyl((x - s_ * 0.2, y + c * 0.2, z + 0.62), 0.2, 1.7, iron, rot=(R(84), 0, rot), verts=24)
+    sphere((x + s_ * 0.6, y - c * 0.6, z + 0.6), 0.2, iron)
+    for dx in (-0.42, 0.42):
+        for dy in (-0.4, 0.4):
+            wx, wy = x + dx * c - dy * s_ * 0, y + dy * c + dx * s_
+            cyl((x + dx * c - dy * s_, y + dx * s_ + dy * c, z + 0.16), 0.16, 0.1, carr, rot=(0, R(90), rot), verts=16)
+
+
+def build_deck_v2(sc):
+    deckwood = wood_mat("deckwood", (0.78, 0.45, 0.17), (0.55, 0.29, 0.1), 16.0)
+    railwood = wood_mat("railwood", (0.5, 0.26, 0.1), (0.28, 0.13, 0.05), 8.0)
+    hullwood = wood_mat("hullwood", (0.45, 0.22, 0.08), (0.22, 0.1, 0.04), 5.0)
+    # deck planks (individual boards with gaps)
+    for i in range(16):
+        box((-3.4 + i * 0.45 + 0.22, 6, -0.1), (0.42, 30, 0.2), deckwood, bevel=0.015)
+    # hull sides + bulwark + rail + balusters
+    for side in (-1, 1):
+        box((side * 3.75, 6, -0.6), (0.3, 30, 2.4), hullwood)
+        box((side * 3.65, 6, 0.55), (0.2, 30, 1.1), railwood)
+        box((side * 3.65, 6, 1.18), (0.42, 30.2, 0.14), railwood)
+        for k in range(30):
+            cyl((side * 3.45, -8.5 + k * 1.0, 0.7), 0.05, 0.9, railwood, verts=8)
+        box((side * 3.9, 6, -0.25), (0.08, 30, 0.22), mat("trimgold", (0.95, 0.68, 0.12), 0.4, metal=0.6), bevel=0)
+    # raised stern with helm
+    box((0, -6.5, 0.45), (7.2, 5, 0.9), deckwood)
+    helm((0, -5.0, 0.9))
+    # hatch grating
+    for i in range(6):
+        box((-0.7 + i * 0.28, 9.5, 0.06), (0.06, 1.8, 0.1), railwood, bevel=0)
+        box((0, 8.7 + i * 0.32, 0.06), (1.8, 0.06, 0.1), railwood, bevel=0)
+    # masts, yards, crow's nest, sails with seams
+    mastm = wood_mat("mastwood", (0.6, 0.34, 0.14), (0.36, 0.19, 0.07), 14)
+    sailm = sail_mat("sails")
+    for y, top in ((6, 18), (16, 16)):
+        cyl((0, y, top / 2), 0.32, top, mastm, verts=20)
+        for z, wdt in ((top * 0.48, 7.5), (top * 0.78, 5.5)):
+            cyl((0, y, z), 0.12, wdt, mastm, rot=(0, R(90), 0), verts=10)
+            bpy.ops.mesh.primitive_plane_add(size=1, location=(0, y + 0.35, z - wdt * 0.28), rotation=(R(90), 0, 0))
+            o = bpy.context.object
+            o.scale = (wdt * 0.92, wdt * 0.55, 1)
+            bpy.ops.object.transform_apply(scale=True)
+            o.data.materials.append(sailm)
+            bend = o.modifiers.new("bend", "SIMPLE_DEFORM")
+            bend.deform_method = "BEND"
+            bend.angle = R(28)
+            bend.deform_axis = "Z"
+            o.modifiers.new("sol", "SOLIDIFY").thickness = 0.03
+    cyl((0, 6, 15.5), 0.9, 0.15, mastm, verts=24)  # crow's nest
+    bpy.ops.mesh.primitive_torus_add(location=(0, 6, 16.0), major_radius=0.9, minor_radius=0.06)
+    bpy.context.object.data.materials.append(mastm)
+    # rigging: shrouds + ratline rungs (rope ladders)
+    rope = mat("rope2", (0.62, 0.42, 0.18), 0.9)
+    for side in (-1, 1):
+        for k in range(4):
+            yb = 4.6 + k * 0.9
+            p0, p1 = Vector3(side * 3.55, yb, 1.2), Vector3(side * 0.3, 6, 15.4)
+            rope_between(p0, p1, rope)
+        for j in range(1, 12):
+            f = j / 12
+            a = Vector3(side * (3.55 + (0.3 - 3.55) * f), 4.6 + (6 - 4.6) * f, 1.2 + 14.2 * f)
+            b = Vector3(side * (3.55 + (0.3 - 3.55) * f), 7.3 + (6 - 7.3) * f, 1.2 + 14.2 * f)
+            rope_between(a, b, rope, r=0.018)
+    # flag with skull and crossbones
+    flag = mat("flag2", (0.03, 0.03, 0.04), 0.9)
+    bone = mat("bone", (0.96, 0.95, 0.9), 0.6)
+    box((1.0, 6, 19.0), (2.0, 0.04, 1.3), flag, bevel=0)
+    sphere((1.0, 5.97, 19.15), 0.22, bone, scale=(1, 0.2, 1))
+    for a in (35, -35):
+        box((1.0, 5.96, 18.75), (0.9, 0.03, 0.1), bone, rot=(0, R(a), 0), bevel=0)
+    # props: cannons, barrels, crates, coiled rope, lantern
+    cannon2((-2.6, 3, 0), rot=R(90))
+    cannon2((2.6, 9, 0), rot=R(-90))
+    cannon2((-2.6, 12, 0), rot=R(90))
+    for (x, y, s_) in ((2.5, 1.5, 1.0), (2.95, 2.4, 0.9), (2.4, 2.6, 0.85)):
+        barrel((x, y, 0.5 * s_), s_)
+    crate = wood_mat("crate2", (0.78, 0.55, 0.25), (0.5, 0.32, 0.12), 12)
+    box((-2.5, 13.5, 0.5), (1.1, 1.1, 1.0), crate)
+    box((-2.3, 13.4, 1.45), (0.8, 0.8, 0.8), crate)
+    bpy.ops.mesh.primitive_torus_add(location=(-1.6, 1.0, 0.12), major_radius=0.35, minor_radius=0.09)
+    bpy.context.object.data.materials.append(rope)
+    lant = mat("lantern2", (1, 0.75, 0.35), 1, emit=((1, 0.7, 0.3), 25))
+    sphere((-0.5, 5.6, 2.2), 0.13, lant)
+    # world: saturated sea and sky, a sun, puffy clouds, the enemy ship
+    wavy_ocean(-1.2)
+    ship_model_v2((16, 70, -1.4), dark=True)
+    world((0.38, 0.66, 1.0), 1.0, top=(0.0, 0.22, 0.85))
+    rng = random.Random(5)
+    clouds(12, ((-120, 120), (60, 220)), 30, rng, size=(6, 14))
+    sphere((-60, 200, 50), 8, mat("sun3", (1, 0.95, 0.7), 1, emit=((1, 0.92, 0.6), 25)))
+    light("SUN", (0, 0, 40), 5.5, (1, 0.9, 0.72), rot=(R(45), R(25), R(-30)))
+    look_cam((0.5, -3.5, 2.0), (0, 8, 3.2), lens=20)
+
+
+class Vector3(tuple):
+    def __new__(cls, x, y, z):
+        return super().__new__(cls, (x, y, z))
+
+
+def rope_between(p0, p1, m, r=0.025):
+    import mathutils
+    a, b = mathutils.Vector(p0), mathutils.Vector(p1)
+    mid = (a + b) / 2
+    d = b - a
+    bpy.ops.mesh.primitive_cylinder_add(radius=r, depth=d.length, location=mid, vertices=6)
+    o = bpy.context.object
+    o.rotation_euler = d.to_track_quat("Z", "Y").to_euler()
+    o.data.materials.append(m)
+    return o
+
+
+def ship_model_v2(loc, dark=False):
+    """Rounded hull (subdivided box), gun ports, stern windows, masts and sails."""
+    hull = wood_mat("hull2_%d" % int(loc[0]), (0.38, 0.17, 0.06) if dark else (0.5, 0.25, 0.1),
+                    (0.18, 0.08, 0.03), 5)
+    before = set(bpy.data.objects)
+    bpy.ops.mesh.primitive_cube_add(location=(0, 0, 1.0))
+    h = bpy.context.object
+    h.scale = (2.6, 10, 1.6)
+    bpy.ops.object.transform_apply(scale=True)
+    h.modifiers.new("sub", "SUBSURF").levels = 2
+    h.data.materials.append(hull)
+    bpy.ops.object.shade_smooth()
+    box((0, -8, 3.0), (4.4, 3.5, 1.8), hull, bevel=0.3)
+    trim = mat("trim2_%d" % int(loc[0]), (0.95, 0.68, 0.12), 0.4, metal=0.5)
+    box((-2.55, 0, 2.2), (0.06, 18, 0.2), trim, bevel=0)
+    portm = mat("port2", (0.02, 0.02, 0.02), 0.5)
+    for k in range(7):
+        box((-2.6, -6 + k * 2.1, 1.4), (0.08, 0.5, 0.45), portm, bevel=0)
+    win = mat("sternwin", (1, 0.8, 0.4), 1, emit=((1, 0.7, 0.3), 3))
+    for k in range(3):
+        box((-1.0 + k, -9.76, 3.1), (0.6, 0.05, 0.5), win, bevel=0)
+    mastm = mat("mast3_%d" % int(loc[0]), (0.4, 0.24, 0.1), 0.6)
+    sm = sail_mat("sail3_%d" % int(loc[0]), (0.25, 0.22, 0.2) if dark else (0.98, 0.93, 0.8))
+    for y, hgt in ((-3, 14), (3.5, 17)):
+        cyl((0, y, 2.5 + hgt / 2), 0.25, hgt, mastm, verts=12)
+        bpy.ops.mesh.primitive_plane_add(size=1, location=(0, y + 0.2, 2.5 + hgt * 0.6), rotation=(R(90), 0, 0))
+        o = bpy.context.object
+        o.scale = (5.5, 5, 1)
+        bpy.ops.object.transform_apply(scale=True)
+        o.data.materials.append(sm)
+        bd = o.modifiers.new("bend", "SIMPLE_DEFORM")
+        bd.deform_method = "BEND"
+        bd.angle = R(25)
+        bd.deform_axis = "Z"
+    box((0.8, 3.5, 2.5 + 17 + 0.6), (1.6, 0.05, 1.0), mat("flag3", (0.03, 0.03, 0.04), 0.9), bevel=0)
+    new = [o for o in bpy.data.objects if o not in before]
+    for o in new:
+        o.location.x += loc[0]
+        o.location.y += loc[1]
+        o.location.z += loc[2]
+    return new
+
+
+def build_hold_v2(sc):
+    build_hold(sc)
+    # warmer, more saturated wood + hammocks + hanging rope + cannon in the hold
+    sw = mat("hammock", (0.85, 0.75, 0.5), 0.9)
+    for k in range(2):
+        bpy.ops.mesh.primitive_cylinder_add(radius=0.35, depth=1.8, location=(2.6, 9 + k * 2.2, 1.6),
+                                            rotation=(R(90), 0, 0))
+        o = bpy.context.object
+        o.scale = (1, 1, 0.35)
+        o.data.materials.append(sw)
+    cannon2((-3.0, 7.5, 0), rot=R(90))
+
+
+def build_course_v2(sc):
+    """Test course with a CLEAR WALKING LANE down the middle (x in [-0.9, 1.6]); obstacles sit beside it,
+    plus one crate placed right at the 'bump' spot just past the tester."""
+    floor = mat("cfloor2", (0.32, 0.33, 0.36), 0.45)
+    wall = mat("cwall2", (0.18, 0.28, 0.42), 0.8)
+    box((0, 10, -0.05), (16, 30, 0.1), floor, bevel=0)
+    box((-8, 10, 4), (0.3, 30, 8), wall, bevel=0)
+    box((8, 10, 4), (0.3, 30, 8), wall, bevel=0)
+    box((0, 25, 4), (16, 0.3, 8), wall, bevel=0)
+    tape = mat("tape", (1.0, 0.82, 0.05), 0.5)
+    for x in (-1.1, 1.8):  # yellow lane tape
+        box((x, 11, 0.01), (0.08, 22, 0.02), tape, bevel=0)
+    rng = random.Random(4)
+    cone = mat("cone2", (1.0, 0.35, 0.02), 0.5)
+    for i in range(14):
+        side = -1 if i % 2 else 1
+        x = (rng.uniform(-6, -1.8) if side < 0 else rng.uniform(2.6, 6.5))
+        y = rng.uniform(1, 22)
+        bpy.ops.mesh.primitive_cone_add(radius1=0.3, depth=0.8, location=(x, y, 0.4))
+        bpy.context.object.data.materials.append(cone)
+    cols = [(0.85, 0.15, 0.1), (0.1, 0.45, 0.85), (0.95, 0.75, 0.1), (0.2, 0.65, 0.3)]
+    for i in range(10):
+        side = -1 if i % 2 else 1
+        x = (rng.uniform(-6, -2.0) if side < 0 else rng.uniform(2.8, 6.5))
+        box((x, rng.uniform(2, 22), 0.5), (1, 1, 1), mat("cbox2_%d" % i, cols[i % 4], 0.6))
+    box((-0.25, 6.0, 0.45), (0.9, 0.9, 0.9), mat("bumpbox", (0.85, 0.15, 0.1), 0.6))  # the one he walks into
+    tyre = mat("tyre2", (0.05, 0.05, 0.05), 0.8)
+    for i in range(5):
+        bpy.ops.mesh.primitive_torus_add(location=(rng.uniform(2.6, 5), rng.uniform(4, 18), 0.15),
+                                         major_radius=0.45, minor_radius=0.15)
+        bpy.context.object.data.materials.append(tyre)
+    world((0.05, 0.06, 0.1), 0.5)
+    look_cam((0, -3, 3.0), (0, 10, 0.6), lens=20)
+
+
+SETS.update({"deck2": build_deck_v2, "hold2": build_hold_v2, "course2": build_course_v2})
+EXPOSURE.update({"deck2": -0.4, "hold2": 0.6, "course2": 0.3})
+
+
 if __name__ == "__main__":
     args = sys.argv[1:]
     samples, scale = 28, 1.2

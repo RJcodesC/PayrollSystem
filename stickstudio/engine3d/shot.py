@@ -59,18 +59,18 @@ def lighting(preset):
     w = sc.world
     if preset == "golden":
         light("SUN", (0, 0, 30), 4.5, (1.0, 0.72, 0.45), rot=(R(78), 0, R(-35)), size=0.3)  # sun ~12 deg high
-        sky_strength, haze, haze_col = 0.9, 0.55, (1.0, 0.82, 0.62)
+        sky_strength, haze, haze_col = 1.0, 0.28, (1.0, 0.8, 0.6)
     elif preset == "sunset":
         light("SUN", (0, 0, 30), 3.5, (1.0, 0.5, 0.28), rot=(R(84), 0, R(-25)), size=0.3)
-        sky_strength, haze, haze_col = 0.7, 0.65, (1.0, 0.6, 0.4)
+        sky_strength, haze, haze_col = 0.85, 0.38, (1.0, 0.58, 0.38)
     elif preset == "hold":  # below deck: one warm lantern, blue fill
         light("POINT", (0.8, 6, 1.95), 220, (1, 0.62, 0.28), size=0.1)
         light("AREA", (0, 0, 2.2), 60, (0.35, 0.45, 0.9), size=3)
-        sky_strength, haze, haze_col = 0.3, 0.35, (0.3, 0.22, 0.15)
+        sky_strength, haze, haze_col = 0.3, 0.18, (0.35, 0.22, 0.12)
     elif preset == "lab":
         light("AREA", (0, 12, 7.8), 2200, (0.75, 0.82, 1.0), size=10)
         light("SPOT", (0, 6, 7.5), 1500, (1.0, 0.9, 0.75), size=0.4)
-        sky_strength, haze, haze_col = 0.4, 0.3, (0.55, 0.6, 0.7)
+        sky_strength, haze, haze_col = 0.4, 0.12, (0.5, 0.6, 0.75)
     else:
         sky_strength, haze, haze_col = 1.0, 0.3, (0.8, 0.85, 0.9)
     if w and w.node_tree and "Background" in w.node_tree.nodes:

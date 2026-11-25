@@ -15,6 +15,18 @@ W, H = 1080, 1920
 RIG_HEIGHT = 520.0  # rig height in pixels at scale 1 (feet to top of head)
 
 
+SATURATION = 1.35
+CONTRAST = 0.18
+
+
+def grade(img):
+    """Final colour pass: boost saturation around luminance, then a soft S-curve for punch."""
+    lum = (img * np.array([0.2126, 0.7152, 0.0722], np.float32)).sum(-1, keepdims=True)
+    img = lum + (img - lum) * SATURATION
+    img = np.clip(img, 0, 1)
+    return img + CONTRAST * (img - 0.5) * (1 - np.abs(2 * img - 1))
+
+
 class Shot:
     def __init__(self, directory, t0=0.0):
         self.dir = directory
@@ -37,6 +49,7 @@ class Shot:
             f = np.where(d[..., 3] < 0.5, f * 0.3, f)  # sky: only a light veil, keep it blue
             col = np.array(self.haze["color"], np.float32)
             img = img * (1 - f[..., None]) + col * f[..., None]
+        img = grade(img)
         img = (np.clip(img, 0, 1) * 255).astype(np.uint8)
         h, w = img.shape[:2]
         rgba = np.dstack([img[..., 2], img[..., 1], img[..., 0], np.full((h, w), 255, np.uint8)])  # cairo BGRA

@@ -36,6 +36,7 @@ EXPRESSIONS = {
     "greedy":   (1.2, 1.0, 0.0, (-8, 12), "grin"),   # sparkly eyes
     "thinking": (1.0, 1.0, 0.25, (10, 4), "flat"),
     "wink":     (1.0, 1.0, 0.0, (-6, 6), "grin"),
+    "rage":     (1.0, 0.8, 0.3, (26, -8), "frown"),
 }
 
 DEFAULT_POSE = dict(
@@ -70,6 +71,14 @@ class Look:
     limb: str = None         # limb fill colour; None = solid ink. With a colour, limbs get an ink outline.
     patch: bool = False      # pirate eye patch (pose param "patch": 0 = front eye covered ... 1 = back eye)
     beard: str = None        # hex colour for a full beard
+    outfit: str = None       # ricks style: None | "vest" | "stripes" | "labcoat" | "coat"
+    vest: str = "#3a2a20"    # vest / coat-panel colour
+    stripe: str = "#f4f1e8"  # stripe colour for "stripes"
+    belt: str = None         # belt colour (gold buckle)
+    sash: str = None         # diagonal sash colour
+    sleeve: str = None       # short-sleeve colour on the upper arms
+    boots: str = None        # boot colour (lower legs)
+    stubble: bool = False
     style: str = "classic"   # "ricks": white head, solid black oval eyes, thin limbs, nub hands, capsule torso
 
 
@@ -85,7 +94,7 @@ class Character:
         self.seed = seed
 
     # ------------------------------------------------------------------ helpers
-    def _limb(self, ctx, p0, a1, l1, a2, l2, face, width):
+    def _limb(self, ctx, p0, a1, l1, a2, l2, face, width, dress=None):
         if self.look.style == "ricks" and width == LIMB_W:
             width = 6.5
         dx, dy = _v(a1, face)
@@ -104,6 +113,22 @@ class Character:
             ctx.line_to(*p1)
             ctx.line_to(*p2)
             ctx.stroke()
+        if dress == "sleeve" and self.look.sleeve:  # short sleeve over the upper arm
+            q = (p0[0] + (p1[0] - p0[0]) * 0.42, p0[1] + (p1[1] - p0[1]) * 0.42)
+            for col, w in ((INK, 25), (hexc(self.look.sleeve), 18)):
+                ctx.set_source_rgb(*col)
+                ctx.set_line_width(w)
+                ctx.move_to(*p0)
+                ctx.line_to(*q)
+                ctx.stroke()
+        if dress == "boot" and self.look.boots:  # boot over the lower half of the shin
+            q = (p1[0] + (p2[0] - p1[0]) * 0.45, p1[1] + (p2[1] - p1[1]) * 0.45)
+            for col, w in ((INK, 24), (hexc(self.look.boots), 17)):
+                ctx.set_source_rgb(*col)
+                ctx.set_line_width(w)
+                ctx.move_to(*q)
+                ctx.line_to(*p2)
+                ctx.stroke()
         return p1, p2
 
     def _hand(self, ctx, p, r=12):
@@ -193,11 +218,12 @@ class Character:
 
         # legs
         for (a, k) in ((P["bl"], P["bk"]), (P["fl"], P["fk"])):
-            knee, foot = self._limb(ctx, hip, a, THIGH * lk.height, a - k, SHIN * lk.height, face, LIMB_W)
+            knee, foot = self._limb(ctx, hip, a, THIGH * lk.height, a - k, SHIN * lk.height, face, LIMB_W, "boot")
             self._shoe(ctx, foot, face, a - k)
 
         # back arm (+ prop)
-        elbow_b, hand_b = self._limb(ctx, shoulder, P["ba"], UPPER_ARM, P["ba"] + P["bb"], FOREARM, face, LIMB_W)
+        elbow_b, hand_b = self._limb(ctx, shoulder, P["ba"], UPPER_ARM, P["ba"] + P["bb"], FOREARM, face, LIMB_W,
+                                     "sleeve")
         if P["hold_back"]:
             draw_prop(ctx, P["hold_back"], hand_b, face, P["prop_angle"], t)
         self._hand(ctx, hand_b)
@@ -214,7 +240,8 @@ class Character:
         self._head(ctx, hc, P, t, face, mouth_open)
 
         # front arm (+ prop)
-        elbow_f, hand_f = self._limb(ctx, shoulder, P["fa"], UPPER_ARM, P["fa"] + P["fb"], FOREARM, face, LIMB_W)
+        elbow_f, hand_f = self._limb(ctx, shoulder, P["fa"], UPPER_ARM, P["fa"] + P["fb"], FOREARM, face, LIMB_W,
+                                     "sleeve")
         if P["hold"]:
             draw_prop(ctx, P["hold"], hand_f, face, P["prop_angle"], t)
         self._hand(ctx, hand_f)
@@ -345,6 +372,66 @@ class Character:
         ctx.restore()
         dn = (-ux, -uy)
         top = (neck[0] - ux * 6, neck[1] - uy * 6)
+        qx, qy = -uy, ux  # across the body
+        def seg(p0, p1, col, lw, cap=1):
+            ctx.set_line_cap(cap)
+            ctx.set_source_rgb(*col)
+            ctx.set_line_width(lw)
+            ctx.move_to(*p0)
+            ctx.line_to(*p1)
+            ctx.stroke()
+        def along(f, off=0.0):  # point f of the way from hip-end (0) to neck-end (1), offset across
+            return (a[0] + (b[0] - a[0]) * f + qx * off, a[1] + (b[1] - a[1]) * f + qy * off)
+        if lk.outfit == "stripes":
+            for k in range(5):
+                f = 0.08 + k * 0.2
+                hw = w - 4
+                seg(along(f, -hw), along(f, hw), hexc(lk.stripe), 11, 0)
+        if lk.outfit in ("vest", "coat", "labcoat"):
+            col = hexc("#f4f4f0") if lk.outfit == "labcoat" else hexc(lk.vest)
+            for side in (-1, 1):
+                seg(along(-0.15, side * w * 0.58), along(1.0, side * w * 0.58), INK, w * 0.84 + 7)
+                seg(along(-0.15, side * w * 0.58), along(1.0, side * w * 0.58), col, w * 0.84)
+            # lapels
+            for side in (-1, 1):
+                ctx.move_to(*along(1.02, side * w * 0.12))
+                ctx.line_to(*along(0.55, side * w * 0.05))
+                ctx.line_to(*along(0.9, side * w * 0.62))
+                ctx.close_path()
+                ctx.set_source_rgb(*col)
+                ctx.fill_preserve()
+                ctx.set_source_rgb(*INK)
+                ctx.set_line_width(3.5)
+                ctx.stroke()
+            if lk.outfit == "labcoat":  # breast pocket with pens
+                px0, py0 = along(0.62, -w * 0.58)
+                ctx.rectangle(px0 - 13, py0 - 10, 26, 22)
+                ctx.set_source_rgb(*INK)
+                ctx.set_line_width(3)
+                ctx.stroke()
+                for dx, pc in ((-6, "#2f6fe0"), (4, "#d63c46")):
+                    seg((px0 + dx, py0 - 10), (px0 + dx, py0 - 22), hexc(pc), 4)
+        if lk.sash:
+            seg(along(0.95, -w * 0.9), along(0.15, w * 0.9), INK, 24)
+            seg(along(0.95, -w * 0.9), along(0.15, w * 0.9), hexc(lk.sash), 17)
+        if lk.belt:
+            seg(along(0.1, -w - 1), along(0.1, w + 1), INK, 20, 0)
+            seg(along(0.1, -w + 3), along(0.1, w - 3), hexc(lk.belt), 13, 0)
+            bx, by = along(0.1, 0)
+            ctx.rectangle(bx - 10, by - 9, 20, 18)
+            ctx.set_source_rgb(*hexc("#e6c04a"))
+            ctx.fill_preserve()
+            ctx.set_source_rgb(*INK)
+            ctx.set_line_width(3)
+            ctx.stroke()
+        # light from the upper front: a soft highlight strip on the lit side
+        ctx.save()
+        ctx.set_source_rgba(1, 1, 1, 0.16)
+        ctx.set_line_width(w * 0.35)
+        ctx.move_to(*along(0.1, w * 0.45 * face))
+        ctx.line_to(*along(0.95, w * 0.45 * face))
+        ctx.stroke()
+        ctx.restore()
         if lk.tie:
             px, py = -uy, ux
             ctx.move_to(top[0] - px * 7, top[1] - py * 7)
@@ -386,11 +473,33 @@ class Character:
         # head
         ricks = lk.style == "ricks"
         ctx.arc(0, 0, r, 0, 2 * math.pi)
-        ctx.set_source_rgb(*((1, 1, 1) if ricks else hexc(lk.skin)))
+        rage = P["expr"] == "rage"
+        ctx.set_source_rgb(*(hexc("#c0396b") if rage else (1, 1, 1) if ricks else hexc(lk.skin)))
         ctx.fill_preserve()
+        if ricks:  # cel shade on the side away from the light, so the head sits in the 3D world
+            ctx.save()
+            ctx.clip()
+            ctx.arc(r * 0.35, r * 0.25, r * 1.05, 0, 2 * math.pi)
+            ctx.arc_negative(r * 0.55, r * 0.05, r * 0.95, 2 * math.pi, 0)
+            ctx.set_source_rgba(0.35, 0.42, 0.62, 0.0)
+            ctx.restore()
+            ctx.save()
+            ctx.arc(0, 0, r, 0, 2 * math.pi)
+            ctx.clip()
+            ctx.arc(-r * 0.55, r * 0.15, r * 0.9, 0, 2 * math.pi)
+            ctx.set_source_rgba(0.38, 0.45, 0.66, 0.16)
+            ctx.fill()
+            ctx.restore()
+            ctx.arc(0, 0, r, 0, 2 * math.pi)
         ctx.set_source_rgb(*INK)
         ctx.set_line_width(7.5 if ricks else OUTLINE)
         ctx.stroke()
+        if rage:  # meme rage: steam puffs from the head
+            for k, sx in enumerate((-1, 1)):
+                ph = (t * 2 + k * 0.5) % 1
+                ctx.arc(sx * (r + 10 + 30 * ph), -r * 0.3 - 40 * ph, 10 + 18 * ph, 0, 2 * math.pi)
+                ctx.set_source_rgba(1, 1, 1, 0.9 * (1 - ph))
+                ctx.fill()
         # hair
         if lk.hair == "tuft":
             ctx.set_line_width(5)
@@ -403,6 +512,24 @@ class Character:
             for a in (-60, -70, -80):
                 ctx.arc(0, 0, r - 2, math.radians(a - 150), math.radians(a - 120))
                 ctx.stroke()
+        elif lk.hair == "spiky":
+            ctx.move_to(-r * 0.8, -r * 0.55)
+            for i in range(6):
+                ax_ = -r * 0.8 + i * r * 0.32
+                ctx.line_to(ax_ + r * 0.16, -r * 1.22 - (i % 2) * 10)
+                ctx.line_to(ax_ + r * 0.32, -r * 0.7)
+            ctx.close_path()
+            ctx.set_source_rgb(*INK)
+            ctx.fill()
+        elif lk.hair == "messy":
+            ctx.set_source_rgb(*INK)
+            ctx.arc(0, -r * 0.15, r * 1.02, math.radians(195), math.radians(345))
+            ctx.arc_negative(0, -r * 0.05, r * 0.86, math.radians(330), math.radians(210))
+            ctx.close_path()
+            ctx.fill()
+            for i in range(4):
+                ctx.arc(-r * 0.6 + i * r * 0.4, -r * 0.85, r * 0.2, 0, 2 * math.pi)
+                ctx.fill()
         elif lk.hair == "curl":
             ctx.set_line_width(5)
             ctx.arc(10, -r - 8, 12, math.radians(90), math.radians(400))
@@ -570,8 +697,8 @@ class Character:
         ctx.set_source_rgb(*INK)
         ctx.set_line_width(5)
         if m > 0.06 or mouth == "o":
-            h = 6 + 24 * clamp(m) if mouth != "o" else 13 + 8 * clamp(m)
-            w = 17 if mouth != "o" else 12
+            h = 6 + 24 * clamp(m) if mouth != "o" else (22 if ricks else 13) + 8 * clamp(m)
+            w = 17 if mouth != "o" else (17 if ricks else 12)
             ctx.save()
             ctx.translate(mx, my)
             ctx.scale(w, h)
@@ -595,6 +722,38 @@ class Character:
             ctx.stroke()
         elif mouth == "soft":
             ctx.arc(mx, my - 20, 16, math.radians(55), math.radians(125))
+            ctx.stroke()
+        elif mouth == "grin" and ricks:  # wide open grin: top teeth + tongue
+            ctx.move_to(mx - 28, my - 8)
+            ctx.curve_to(mx - 20, my + 30, mx + 20, my + 30, mx + 28, my - 8)
+            ctx.close_path()
+            ctx.set_source_rgb(*hexc("#4a1620"))
+            ctx.fill_preserve()
+            ctx.save()
+            ctx.clip_preserve()
+            ctx.rectangle(mx - 30, my - 10, 60, 10)
+            ctx.set_source_rgb(1, 1, 1)
+            ctx.fill()
+            ctx.arc(mx, my + 22, 13, 0, 2 * math.pi)
+            ctx.set_source_rgb(*hexc("#e2626f"))
+            ctx.fill()
+            ctx.restore()
+            ctx.set_source_rgb(*INK)
+            ctx.set_line_width(5)
+            ctx.stroke()
+        elif mouth == "frown" and ricks and P["expr"] in ("angry", "rage"):  # gritted teeth
+            ctx.rectangle(mx - 22, my - 6, 44, 18)
+            ctx.set_source_rgb(1, 1, 1)
+            ctx.fill_preserve()
+            ctx.set_source_rgb(*INK)
+            ctx.set_line_width(4.5)
+            ctx.stroke()
+            ctx.move_to(mx - 22, my + 3)
+            ctx.line_to(mx + 22, my + 3)
+            for k in range(1, 4):
+                ctx.move_to(mx - 22 + k * 11, my - 6)
+                ctx.line_to(mx - 22 + k * 11, my + 12)
+            ctx.set_line_width(2.5)
             ctx.stroke()
         elif mouth == "grin":
             ctx.move_to(mx - 22, my - 6)
@@ -641,6 +800,13 @@ class Character:
             ctx.restore()
             ctx.set_source_rgb(*hexc("#5b3a26"))
             ctx.fill()
+        if lk.stubble:
+            ctx.set_source_rgba(*INK, 0.35)
+            for k in range(9):
+                ang = math.radians(50 + k * 10)
+                rr = r * (0.8 + 0.06 * (k % 2))
+                ctx.arc(math.cos(ang) * rr + 4, math.sin(ang) * rr, 1.6, 0, 2 * math.pi)
+                ctx.fill()
         # sweat
         if P["sweat"] > 0:
             yy = -30 + (t * 60) % 40

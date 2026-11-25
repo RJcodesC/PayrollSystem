@@ -17,7 +17,16 @@ from engine.render import Episode, N, label  # noqa: E402
 from engine.text import text_center  # noqa: E402
 import cairo  # noqa: E402
 
-HERO, CAPT, TEST = P.HERO, P.CAPT, P.TEST
+from engine.rig import Character, Look  # noqa: E402
+
+HERO = Character("hero", Look(coat="#f4f1e8", coat_dark="#cfc8b6", outfit="stripes", stripe="#d82a35", sash="#d82a35",
+                              belt="#3a2416", sleeve="#d82a35", boots="#2a1a10", hat="bandana", hat_color="#d82a35",
+                              patch=True, stubble=True, style="ricks"), seed=0.6)
+CAPT = Character("capt", Look(coat="#efe6cf", coat_dark="#c4bba3", outfit="coat", vest="#1c46a8", belt="#2a1a10",
+                              sleeve="#1c46a8", boots="#141418", hat="tricorn", hat_color="#1a1a1e",
+                              hat_band="#f0b818", beard="#3a2416", style="ricks"), seed=1.4)
+TEST = Character("tester", Look(coat="#5aa8ff", coat_dark="#3a86de", outfit="labcoat", hair="messy", glasses=True,
+                                tie="#e8323e", boots="#3a3a40", patch=True, style="ricks"), seed=2.4)
 
 
 # ---------------------------------------------------------------- helpers
@@ -273,7 +282,8 @@ def camE(T):
 
 def anchorsE(T):
     return {"tester": {"h": 1.75, "keys": [[0, 0.0, 1.5, 0.0], [T.line(1)[0], 0.0, 1.5, 0.0],
-                                           [T.line(1)[1] - 0.1, -0.4, 5.0, 0.0], [T.line(2)[1], -0.4, 5.2, 0.0],
+                                           [T.line(1)[1] - 0.1, -0.2, 5.15, 0.0], [T.line(2)[1], -0.2, 5.15, 0.0],
+                                           [T.line(3)[0] + 0.6, 0.9, 5.4, 0.0],
                                            [T.word(3, "see"), 1.0, 9.0, 0.0], [T.dur + 1, 1.0, 9.0, 0.0]]}}
 
 
@@ -386,13 +396,13 @@ for i, ln in enumerate(LINES):
     ln.gap = 0.05
 
 SCENES = [
-    FilmScene("A_deck", LINES[0:3], drawA, "deck", "golden", camA, anchorsA, camera=camA_shake, overlay=ovA,
+    FilmScene("A_deck", LINES[0:3], drawA, "deck2", "golden", camA, anchorsA, camera=camA_shake, overlay=ovA,
               keywords=[(0, "good"), (1, "attack"), (2, "blinding")], named=[(1, "attack", "enemy")],
               exprs={"hero": ["sly", "sly", "angry"]}, exposure=-0.2,
               cues=lambda T: [(0.0, "waves", 0.4), (T.word(0, "good"), "pop", 0.7),
                               (T.word(1, "attack") - 0.1, "hit", 1.0), (T.word(1, "attack") + 0.3, "hit", 0.8),
                               (T.word(2, "blinding"), "reveal", 0.4)], pad=0.1),
-    FilmScene("B_hold", LINES[3:8], drawB, "hold", "hold", camB, anchorsB, overlay=ovB,
+    FilmScene("B_hold", LINES[3:8], drawB, "hold2", "hold", camB, anchorsB, overlay=ovB,
               keywords=[(0, "black"), (3, "twenty"), (4, "twenty")], named=[(4, "sword", "capt")],
               exprs={"hero": ["angry", "shock", "worried", "worried", "worried"], "capt": ["angry"] * 5},
               exposure=0.4, trans="cut",
@@ -400,22 +410,22 @@ SCENES = [
                               (T.line(1)[1] - 0.45, "boing", 0.8), (T.line(2)[0], "pop", 0.5)]
               + [(T.line(3)[0] + k * 0.18, "tick", 1.0) for k in range(6)]
               + [(T.word(4, "twenty") - 0.2, "clink", 1.0), (T.word(4, "twenty"), "clink", 0.9)], pad=0.1),
-    FilmScene("C_theory", LINES[8:11], drawC, "deck", "golden", camC, lambda T: {"hero": HERO_DECK}, overlay=ovC,
+    FilmScene("C_theory", LINES[8:11], drawC, "deck2", "golden", camC, lambda T: {"hero": HERO_DECK}, overlay=ovC,
               keywords=[(0, "covered"), (2, "open")], exprs={"hero": ["smile", "neutral", "smile"]},
               exposure=-0.2, trans="cut",
               cues=lambda T: [(T.word(0, "theory"), "pop", 0.7), (T.line(1)[0], "pop", 0.5)], pad=0.1),
-    FilmScene("D_flip", LINES[11:13], drawD, "hold", "hold", camD, anchorsB, camera=camD_shake, overlay=ovD,
+    FilmScene("D_flip", LINES[11:13], drawD, "hold2", "hold", camD, anchorsB, camera=camD_shake, overlay=ovD,
               keywords=[(0, "flip"), (1, "night")], exprs={"hero": ["sly", "grin"], "capt": ["angry", "shock"]},
               exposure=0.4, trans="cut",
               cues=lambda T: [(T.word(0, "flip"), "zip", 0.8), (T.word(1, "Boom"), "hit", 1.0),
                               (T.word(1, "night"), "reveal", 0.6)], pad=0.1),
-    FilmScene("E_course", LINES[13:17], drawE, "course", "lab", camE, anchorsE, overlay=ovE,
+    FilmScene("E_course", LINES[13:17], drawE, "course2", "lab", camE, anchorsE, overlay=ovE,
               keywords=[(0, "tested"), (2, "bumping"), (3, "see")], named=[(0, "MythBusters", "tester")],
               exprs={"tester": ["smile", "neutral", "worried", "grin"]}, exposure=0.2, trans="flash",
               cues=lambda T: [(0.1, "ding", 0.5), (T.line(1)[0] + 0.3, "steps", 0.6),
                               (T.word(2, "bumping"), "boing", 0.9), (T.word(3, "Flip"), "zip", 0.8),
                               (T.word(3, "see"), "ding", 0.8)], pad=0.1),
-    FilmScene("F_sunset", LINES[17:19], drawF, "deck", "sunset", camF, lambda T: {"hero": HERO_DECK},
+    FilmScene("F_sunset", LINES[17:19], drawF, "deck2", "sunset", camF, lambda T: {"hero": HERO_DECK},
               camera=camF_shake, overlay=ovF, keywords=[(0, "prove"), (1, "switch")],
               exprs={"hero": ["sly", "smile"]}, exposure=-0.1, trans="cut",
               cues=lambda T: [(T.word(0, "prove") + 0.2, "stamp", 1.0), (T.word(1, "lights") + 0.15, "stamp", 0.5),
