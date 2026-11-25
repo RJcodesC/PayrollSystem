@@ -529,3 +529,23 @@ def edge_voice(text, voice="en-US-ChristopherNeural", rate="-5%", pitch="-2Hz"):
         else:
             raise RuntimeError(f"edge-tts failed for: {text}")
     return path
+
+
+def creature_voice(text, voice="am_echo", speed=0.8):
+    """The kid's own voice, stolen: slowed whisper, doubled an octave-ish down, with a tight echo."""
+    import hashlib
+    import subprocess
+    import soundfile as sf
+    key = hashlib.sha1(f"creature|{voice}|{speed}|{text}".encode()).hexdigest()[:16]
+    d = os.path.join(ROOT, "cache", "creature")
+    os.makedirs(d, exist_ok=True)
+    out = os.path.join(d, f"{key}.wav")
+    if not os.path.exists(out):
+        raw = os.path.join(d, f"{key}_raw.wav")
+        sf.write(raw, tts(text, voice, speed), SR)
+        fc = (f"[0:a]asplit=2[a][b];[b]asetrate={SR}*0.72,aresample={SR},atempo=1.38,volume=0.75[lo];"
+              f"[a][lo]amix=inputs=2:normalize=0,aecho=0.8:0.6:45|90:0.35|0.2,highpass=f=90,"
+              f"tremolo=f=9:d=0.25[o]")
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", raw, "-filter_complex", fc, "-map", "[o]", out],
+                       check=True)
+    return out

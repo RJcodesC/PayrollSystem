@@ -20,8 +20,8 @@ _spec = importlib.util.spec_from_file_location("elevator_part3", os.path.join(RO
                                                                               "episode.py"))
 P3 = importlib.util.module_from_spec(_spec)  # Part 3: kid, creature, key, rule box, vignette
 _spec.loader.exec_module(P3)
-from script import LINES as TEXT, VOICE, RATE  # noqa: E402
-from engine.audio import edge_voice  # noqa: E402
+from script import LINES as TEXT, VOICE, RATE, CREATURE_LINE  # noqa: E402
+from engine.audio import edge_voice, creature_voice  # noqa: E402
 from engine.core import pulse, EASES, clamp, hexc  # noqa: E402
 from engine.filmplan import FilmScene  # noqa: E402
 from engine.render import Episode, N, label  # noqa: E402
@@ -162,7 +162,7 @@ def OV(f, red=0.0):
 def choice_buttons(c, p, t):
     if p <= 0:
         return
-    opts = (("A", "THROUGH", "THE DOOR", "#d63c46"), ("B", "RUN DOWN", "TO ELEVATOR", "#2f6fe0"))
+    opts = (("A", "COUNT", "WITH IT", "#d63c46"), ("B", "STAY", "SILENT", "#2f6fe0"))
     for i, (letter, l1, l2, col) in enumerate(opts):
         pp = EASES["back"](clamp(p * 1.4 - i * 0.25))
         if pp <= 0:
@@ -415,68 +415,82 @@ def shakeD(f):
     return dict(shake=10 * pulse(f.t, T.word(1, "top"), 0.5))
 
 
-# ================================================================= SHOT E: the choice (lines 13-15)
+# ================================================================= SHOT E: it speaks, the choice (lines 13-16)
 def camE(T):
-    td, te, tp = T.word(0, "door"), T.word(1, "elevator"), T.word(2, "decides")
+    tw, ts, tp = T.word(0, "whispers"), T.word(2, "silent"), T.word(3, "decides")
     k = [K(0, (1.25, 2.6, 1.75), (-0.1, -1.1, 1.2), 22)]
-    go(k, td - 0.2, (1.15, 2.2, 1.7), (-0.05, -1.2, 1.2), 23)
-    hold(k, T.line(0)[1])
-    go(k, te - 0.2, (1.2, 2.0, 1.6), (0.0, -0.8, 1.05), 24)
-    hold(k, T.line(1)[1] + 0.1)
-    go(k, tp - 0.2, (1.05, 1.7, 1.6), (0.0, -0.7, 1.15), 26)
+    go(k, tw - 0.2, (1.1, 1.9, 1.7), (0.05, -1.1, 1.3), 25)          # in on the two of them
+    hold(k, T.line(1)[1] + 0.2)
+    go(k, ts - 0.2, (1.15, 2.1, 1.62), (0.0, -0.9, 1.1), 24)
+    hold(k, T.line(2)[1] + 0.1)
+    go(k, tp - 0.2, (1.05, 1.8, 1.65), (0.0, -0.8, 1.2), 26)
     hold(k, T.dur + 1)
     return k
 
 
 def anchorsE(T):
-    return {"kid": [0.05, -0.75, 0.0, 1.75], "well": [0.0, 0.2, 2.75, 0.5]}
+    return {"kid": [0.05, -0.75, 0.0, 1.75]}
 
 
 def drawE(f):
     c, t, T = f.ctx, f.t, f.T
     f.scene.shot.draw_bg(c, f.gt)
     k = line_idx(f)
-    kid(f, face=-1 if k == 0 else 1, look=-1 if k == 0 else 1, lookY=-0.3, fa=30, fb=80, ba=30, bb=80,
-        tilt=math.sin(f.gt * 24) * 1.5)
-    # it lowers itself down the well, head first, behind him
+    tw = T.word(0, "whispers")
+    p, pts = kid(f, face=-1, look=1 if t > tw else -0.4, lookY=-0.3, fa=30, fb=80, ba=30, bb=80,
+        tilt=math.sin(f.gt * 24) * (2.5 if k == 1 else 1.2))
+    # it lowers itself down the well, head first, until its face is right next to his
     kx, ky, ks = f.scene.shot.anchor("kid", f.gt)
-    drop = EASES["inout"](f.r(T.line(1)[1], T.dur - 1.6))
+    drop = EASES["inout"](f.r(0.2, tw))
     r = 150.0
-    x = kx + 230
+    hx = p["x"] + pts["head"][0] * p["s"]
+    x = max(r + 20, hx - 0.17 * ks * 520 - r - 5 + 20 * f.r(tw, tw + 0.6))  # just clear of his head, leaning in
     yy = 250 - 2 * r + (ky - ks * 520 + 200 - 250 + 2 * r) * drop  # ends right beside his face
     c.set_source_rgb(0.02, 0.02, 0.03)
     c.set_line_width(r * 0.18)
     c.move_to(x, -50)
     c.line_to(x, yy - r)
     c.stroke()
+    talk = 0.25 * abs(math.sin(f.gt * 14)) if k == 1 else 0.0
     c.save()
     c.translate(x, yy)
     c.rotate(math.pi)  # hanging upside down
-    creature_head(c, 0, 0, r, f.gt, grin=1.0, alpha=0.95)
+    creature_head(c, 0, 0, r, f.gt, grin=1.0 + talk, alpha=0.97)
     c.restore()
-    if (f.gt * 1.7) % 1 < 0.05:
-        dark(c, 0.85)
+    # one hard blackout right before it speaks; only its eyes and grin hang in the dark
+    if flicker(t, [T.line(1)[0] - 0.3], 0.18):
+        dark(c, 0.95)
+        c.save()
+        c.translate(x, yy)
+        c.rotate(math.pi)
+        creature_head(c, 0, 0, r, f.gt, grin=1.0, alpha=0.6)
+        c.restore()
 
 
 def ovE(f):
     c, T = f.ctx, f.T
-    OV(f, red=0.55 + 0.35 * math.sin(f.gt * 3))
-    choice_buttons(c, f.r(T.word(0, "door") - 0.3, T.word(1, "elevator") + 0.3), f.gt)
+    k = line_idx(f)
+    OV(f, red=(1.0 if k == 1 else 0.55 + 0.35 * math.sin(f.gt * 3)))
+    choice_buttons(c, f.r(T.word(2, "count") - 0.2, T.word(2, "silent") + 0.3), f.gt)
 
 
 def shakeE(f):
-    return dict(shake=2)
+    T = f.T
+    return dict(shake=2 + 6 * pulse(f.t, T.word(1, "count"), 0.5))
 
 
 # ---------------------------------------------------------------- assemble
 GAPS = {0: 0.0, 1: 0.45, 2: 0.15, 3: 0.2, 4: 0.55, 5: 0.5, 6: 0.45, 7: 0.1, 8: 0.35, 9: 0.35, 10: 0.3,
-        11: 0.1, 12: 0.45, 13: 0.1, 14: 0.25, 15: 0.4}
+        11: 0.1, 12: 0.45, 13: 0.15, 14: 0.35, 15: 0.5, 16: 0.4}
 LINES = []
 for i, txt in enumerate(TEXT):
     spoken = txt
     cap = txt.replace("thirteen", "13")
     ln = N(cap, gap=GAPS.get(i, 0.25))
-    ln.audio = edge_voice(spoken, VOICE, RATE.get(i, "-5%"), "-3Hz")
+    if i == CREATURE_LINE:
+        ln.audio = creature_voice(spoken)
+    else:
+        ln.audio = edge_voice(spoken, VOICE, RATE.get(i, "-5%"), "-3Hz")
     LINES.append(ln)
 
 SCENES = [
@@ -508,12 +522,13 @@ SCENES = [
               exprs={"kid": ["worried", "shock"]}, exposure=0.2, trans="cut",
               cues=lambda T: [(T.word(0, "up") - 0.4, "whoosh", 0.9), (T.word(1, "never"), "heartbeat", 1.0),
                               (T.word(1, "top"), "hit", 1.0), (T.word(1, "top"), "dun", 1.0)], pad=0.2),
-    FilmScene("E_choice", LINES[13:16], drawE, "stairs_open", "emergency", camE, anchorsE, module="sets_stairs",
-              camera=shakeE, overlay=ovE, keywords=[(0, "door"), (1, "elevator"), (2, "decides")],
-              exprs={"kid": ["worried", "worried", "worried"]}, exposure=-0.1, trans="cut",
-              cues=lambda T: [(0.0, "heartbeat", 0.8), (T.word(0, "door"), "creak", 0.6),
-                              (T.word(1, "elevator"), "ding", 0.6), (T.word(2, "Comment"), "pop", 0.5),
-                              (T.word(2, "decides"), "dun", 0.8)], pad=1.0),
+    FilmScene("E_choice", LINES[13:17], drawE, "stairs_open", "emergency", camE, anchorsE, module="sets_stairs",
+              camera=shakeE, overlay=ovE, keywords=[(0, "whispers"), (1, "count"), (2, "silent"), (3, "decides")],
+              exprs={"kid": ["worried", "worried", "sad", "worried"]}, exposure=-0.1, trans="cut",
+              cues=lambda T: [(0.0, "heartbeat", 0.8), (T.word(0, "leans"), "scrape", 0.5),
+                              (T.word(0, "whispers"), "dun", 0.7), (T.line(1)[0] - 0.1, "buzz", 0.6),
+                              (T.word(2, "count"), "tick", 0.9), (T.word(2, "silent"), "tick", 0.9),
+                              (T.word(3, "Comment"), "pop", 0.5), (T.word(3, "decides"), "dun", 0.8)], pad=1.0),
 ]
 
 EPISODE = Episode("elevator_part4", SCENES, music="horror", music_gain=0.2, caption_style="ricks",

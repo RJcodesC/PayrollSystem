@@ -13,9 +13,11 @@ LINES = [
     "Rule six. Stop climbing. It's not behind you.",
     "He looks up.",
     "It was never chasing him. It was waiting... at the top.",
-    "Go back through the door...",
-    "or run back down to the elevator?",
+    "Then it leans in... and whispers. In HIS voice.",
+    "Your turn to count.",
+    "Does he count with it... or stay silent?",
     "Comment A or B. The top comment decides Part 5.",
 ]
 VOICE = "en-US-ChristopherNeural"
-RATE = {0: "-18%", 4: "-10%", 6: "-10%", 11: "-12%"}  # slower on the punch lines
+RATE = {0: "-18%", 4: "-10%", 6: "-10%", 11: "-12%", 13: "-8%"}
+CREATURE_LINE = 14  # spoken by the creature, in the kid's Part 3 voice (Kokoro am_echo), processed  # slower on the punch lines
