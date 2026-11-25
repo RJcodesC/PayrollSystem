@@ -88,7 +88,7 @@ def build_deck(sc):
     flag = mat("flag", (0.04, 0.04, 0.05), 0.9)
     box((0.9, 16, 18.2), (1.8, 0.05, 1.1), flag, bevel=0)
     ocean(-1.0)
-    ship_model((26, 110, -1.2), dark=True)
+    ship_model((16, 70, -1.2), dark=True)
     sky()
     rng = random.Random(5)
     clouds(10, ((-120, 120), (60, 220)), 30, rng, size=(6, 14))

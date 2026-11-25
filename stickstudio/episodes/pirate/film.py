@@ -75,7 +75,7 @@ def camA(T):
     tg, ta, tb = T.word(0, "good", edge="end"), T.word(1, "attack"), T.word(2, "blinding")
     k = [K(0, *FACE_CU, 24)]
     hold(k, tg + 0.25)
-    k.append(K(ta - 0.35, (1.7, -1.2, 2.4), (14, 60, 4.5), 30))
+    k.append(K(ta - 0.35, (1.7, -1.2, 2.4), (12, 55, 4.5), 30))
     hold(k, T.line(1)[1] + 0.1)
     k.append(K(tb - 0.25, *DECK_MED, 22))
     hold(k, T.dur + 1)
@@ -83,7 +83,7 @@ def camA(T):
 
 
 def anchorsA(T):
-    return {"hero": HERO_DECK, "enemy": [26, 110, 6, 4.0]}
+    return {"hero": HERO_DECK, "enemy": [16, 70, 6, 4.0]}
 
 
 def drawA(f):
@@ -107,7 +107,9 @@ def drawA(f):
 def ovA(f):
     OV(f)
     T = f.T
-    P.pop(f.ctx, "?!", 800, 560, f.r(T.word(0, "good") + 0.1, T.word(0, "good") + 0.35), size=150, color="#ffffff")
+    if P.line_idx(f) == 0:
+        P.pop(f.ctx, "?!", 800, 560, f.r(T.word(0, "good") + 0.1, T.word(0, "good") + 0.35), size=150,
+              color="#ffffff")
     t17 = T.word(1, "1700s")
     label(f.ctx, "1700s", 540, 330, f.r(t17, t17 + 0.25) * (1 - f.r(T.line(1)[1], T.line(1)[1] + 0.3)),
           size=90, color="#ffffff")
@@ -128,7 +130,7 @@ def camB(T):
     hold(k, T.line(1)[1] + 0.15)
     k.append(K(T.word(3, "twenty") - 0.3, (0.05, 1.35, 1.5), (0.0, 3.0, 1.35), 24))
     hold(k, T.line(3)[1] + 0.05)
-    k.append(K(T.word(4, "twenty") - 0.3, (-1.1, 1.2, 1.55), (0.45, 6.0, 1.25), 22))
+    k.append(K(T.word(4, "twenty") - 0.3, (-0.35, 0.2, 1.5), (0.35, 5.0, 1.25), 22))
     hold(k, T.dur + 1)
     return k
 
@@ -204,7 +206,7 @@ def ovC(f):
     c, t, T = f.ctx, f.t, f.T
     OV(f)
     tt = T.word(0, "theory")
-    label(c, "THE THEORY", 540, 330, f.r(tt, tt + 0.25), size=70)
+    label(c, "THE THEORY", 540, 330, f.r(tt, tt + 0.25) * (1 - f.r(T.line(0)[1], T.line(0)[1] + 0.3)), size=70)
     if P.line_idx(f) == 1:
         k = EASES["back"](f.r(T.line(1)[0], T.line(1)[0] + 0.3))
         c.save()
