@@ -127,7 +127,7 @@ def run_checks(ep):
             if not (40 < x < 1040 and 200 < y < 2400):
                 missing.append(f"{sc.name}:'{word}'->{anchor} at ({x:.0f},{y:.0f})")
     res.append(("R5 named things on screen when said", not missing,
-                "verified on render" if films and films[0].shot else "pending render" + (f"; {missing}" if missing else "")))
+                ("verified on render" if films and films[0].shot else "pending render") + (f"; {missing}" if missing else "")))
     # R6
     multi, memes = [], 0
     for sc in films:

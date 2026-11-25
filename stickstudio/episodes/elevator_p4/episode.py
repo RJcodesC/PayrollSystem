@@ -216,10 +216,10 @@ def f2(y):
 # on the landing below, the creature. The hook: its grin right over his shoulder from frame one.
 def camA(T):
     tb = T.word(0, "Back")
-    k = [K(0, (-0.75, 0.55, 3.95), (-0.85, 2.2, 3.35), 34)]
-    go(k, tb - 0.15, (-0.78, 0.75, 3.85), (-0.85, 2.2, 3.4), 40)          # creeping push-in on the faces
+    k = [K(0, (-0.9, -1.35, 4.05), (-0.72, 2.3, 3.2), 24)]
+    go(k, tb - 0.15, (-0.88, -1.0, 4.0), (-0.72, 2.3, 3.25), 30)          # creeping push-in on the faces
     hold(k, T.line(1)[0] + 0.2)
-    go(k, T.word(2, "door") - 0.2, (0.35, -1.25, 4.55), (-0.9, 1.4, 2.55), 22)  # pull up and back to the door landing
+    go(k, T.word(2, "door") - 0.2, (0.75, -1.45, 5.3), (-0.85, 1.7, 2.5), 20)  # pull up and back to the door landing
     hold(k, T.dur + 1)
     return k
 
@@ -284,8 +284,8 @@ HANDLE = [0.36, -1.5, 3.9, 0.1]
 
 
 def camB(T):
-    k = [K(0, (-0.95, 1.6, 4.35), (0.05, -1.6, 3.85), 21)]
-    go(k, T.word(0, "handle") - 0.15, (-0.7, 0.9, 4.2), (0.15, -1.6, 3.85), 24)
+    k = [K(0, (-0.95, 2.6, 4.7), (0.05, -1.6, 3.85), 21)]
+    go(k, T.word(0, "handle") - 0.15, (-0.75, 1.7, 4.45), (0.15, -1.6, 3.85), 23)
     hold(k, T.line(1)[1] + 0.25)
     go(k, T.word(2, "stairs") - 0.2, (0.85, -0.35, 4.15), (0.3, -1.55, 3.95), 32)  # in on the key and the lock
     hold(k, T.dur + 1)
@@ -334,14 +334,14 @@ def camC(T):
     hold(k, T.line(0)[1] + 0.05)
     go(k, T.word(1, "13") - 0.2, (0.75, 0.15, 1.75), (0.95, -1.6, 1.7), 28)   # the sign
     hold(k, T.line(1)[1] + 0.05)
-    go(k, T.word(2, "handwriting") - 0.2, (0.45, 0.35, 1.8), (-1.6, -0.6, 1.78), 26)  # the wall
+    go(k, T.word(2, "handwriting") - 0.2, (-0.2, 0.95, 1.8), (1.6, -0.8, 1.78), 17)  # the wall
     hold(k, T.dur + 1)
     return k
 
 
 def anchorsC(T):
     return {"kid": {"keys": [[0, -0.05, -1.45, 0.0], [T.line(0)[1], 0.15, -0.75, 0.0]], "h": 1.75},
-            "scrawl": [-1.58, -0.6, 1.55, 0.5]}
+            "scrawl": [1.58, -0.8, 1.6, 0.5]}
 
 
 def drawC(f):
@@ -361,7 +361,7 @@ def ovC(f):
 
 def shakeC(f):
     T = f.T
-    return dict(shake=6 * pulse(f.t, T.word(1, "thirteen"), 0.35) + 9 * pulse(f.t, T.word(3, "behind"), 0.45))
+    return dict(shake=6 * pulse(f.t, T.word(1, "13"), 0.35) + 9 * pulse(f.t, T.word(3, "behind"), 0.45))
 
 
 # ================================================================= SHOT D: look up (lines 11-12)
@@ -391,9 +391,9 @@ def drawD(f):
         kid(f, face=1, look=0, lookY=-1, tilt=-12, fa=30, fb=80, ba=30, bb=80)
         return
     x, y, s = f.scene.shot.anchor("top", f.gt)
-    r = max(30.0, s * 520 * 0.55)
     tt = T.word(1, "top")
     reveal = f.r(T.line(1)[0], tt)
+    r = max(120.0, s * 520 * 1.4) * (0.8 + 0.5 * reveal)
     # long arms gripping the railing on both sides of the well
     c.set_line_cap(1)
     for side in (-1, 1):
@@ -418,12 +418,12 @@ def shakeD(f):
 # ================================================================= SHOT E: the choice (lines 13-15)
 def camE(T):
     td, te, tp = T.word(0, "door"), T.word(1, "elevator"), T.word(2, "decides")
-    k = [K(0, (1.0, 1.25, 1.55), (-0.1, -1.1, 1.2), 22)]
-    go(k, td - 0.2, (0.85, 0.75, 1.5), (-0.05, -1.2, 1.25), 24)
+    k = [K(0, (1.25, 2.6, 1.75), (-0.1, -1.1, 1.2), 22)]
+    go(k, td - 0.2, (1.15, 2.2, 1.7), (-0.05, -1.2, 1.2), 23)
     hold(k, T.line(0)[1])
-    go(k, te - 0.2, (0.9, 0.55, 1.45), (0.0, -0.8, 1.0), 26)
+    go(k, te - 0.2, (1.2, 2.0, 1.6), (0.0, -0.8, 1.05), 24)
     hold(k, T.line(1)[1] + 0.1)
-    go(k, tp - 0.2, (0.75, 0.25, 1.5), (0.0, -0.7, 1.2), 30)
+    go(k, tp - 0.2, (1.05, 1.7, 1.6), (0.0, -0.7, 1.15), 26)
     hold(k, T.dur + 1)
     return k
 
@@ -439,10 +439,11 @@ def drawE(f):
     kid(f, face=-1 if k == 0 else 1, look=-1 if k == 0 else 1, lookY=-0.3, fa=30, fb=80, ba=30, bb=80,
         tilt=math.sin(f.gt * 24) * 1.5)
     # it lowers itself down the well, head first, behind him
-    x, y, s = f.scene.shot.anchor("well", f.gt)
-    drop = EASES["inout"](f.r(T.line(2)[0], T.dur - 0.5))
-    r = max(40.0, s * 520 * 0.9)
-    yy = y - 900 + 900 * drop
+    kx, ky, ks = f.scene.shot.anchor("kid", f.gt)
+    drop = EASES["inout"](f.r(T.line(1)[1], T.dur - 1.6))
+    r = 150.0
+    x = kx + 230
+    yy = 250 - 2 * r + (ky - ks * 520 + 200 - 250 + 2 * r) * drop  # ends right beside his face
     c.set_source_rgb(0.02, 0.02, 0.03)
     c.set_line_width(r * 0.18)
     c.move_to(x, -50)
@@ -497,7 +498,7 @@ SCENES = [
     FilmScene("C_same", LINES[7:11], drawC, "stairs_open", "cold", camC, anchorsC, module="sets_stairs",
               camera=shakeC, overlay=ovC,
               keywords=[(0, "same"), (1, "13"), (2, "handwriting"), (3, "behind")],
-              named=[(2, "wall", "scrawl")], exprs={"kid": ["worried", "worried", "sad", "worried"]},
+              named=[(2, "handwriting", "scrawl")], exprs={"kid": ["worried", "worried", "sad", "worried"]},
               exposure=0.15, trans="flash",
               cues=lambda T: [(0.0, "creak", 1.0), (T.word(0, "same"), "dun", 0.9), (T.word(1, "13"), "hit", 0.8),
                               (T.word(2, "handwriting"), "scrape", 0.6), (T.word(3, "six"), "stamp", 0.8),

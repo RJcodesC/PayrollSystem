@@ -90,7 +90,7 @@ def build_stairs(sc, open_door=False, scrawl=False):
     red_lamp = mat("redlamp", (1, 0.1, 0.06), 0.3, emit=((1, 0.06, 0.03), 18))
     tube = mat("tube", (0.9, 1, 0.95), 0.3, emit=((0.75, 1.0, 0.9), 6))
     warm = mat("warmgap", (1, 0.7, 0.4), 0.3, emit=((1, 0.72, 0.42), 25))
-    scrawlm = mat("scrawl", (0.45, 0.02, 0.02), 0.9)
+    scrawlm = mat("scrawl", (0.75, 0.03, 0.03), 0.9, emit=((0.9, 0.05, 0.03), 0.6))
     void = mat("void", (0.0, 0.0, 0.0), 1.0)
 
     top = FLOORS * FH
@@ -159,8 +159,9 @@ def build_stairs(sc, open_door=False, scrawl=False):
         box((-0.85, -1.57, dz + 2.45), (0.22, 0.08, 0.1), red_lamp, bevel=0.01)       # emergency lamp
         box((1.2, 1.5, dz + 2.85), (0.06, 1.2, 0.05), tube, bevel=0)                    # fluorescent tube
     if scrawl:
-        text_obj("STOP CLIMBING", (-1.58, -0.6, 1.95), 0.26, scrawlm, rot=(R(90), R(-4), R(90)), extrude=0.002)
-        text_obj("IT'S NOT BEHIND YOU", (-1.58, -0.6, 1.62), 0.17, scrawlm, rot=(R(90), R(3), R(90)),
+        # scrawled on the right wall above the bottom landing (clear of the open door leaf)
+        text_obj("STOP CLIMBING", (1.58, -0.8, 1.95), 0.17, scrawlm, rot=(R(90), R(-4), R(-90)), extrude=0.002)
+        text_obj("IT'S NOT BEHIND YOU", (1.58, -0.8, 1.7), 0.11, scrawlm, rot=(R(90), R(3), R(-90)),
                  extrude=0.002)
     # ceiling
     box((0, 1.5, top + 0.1), (3.6, 6.6, 0.2), concrete, bevel=0)
