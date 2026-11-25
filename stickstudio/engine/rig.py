@@ -45,7 +45,7 @@ DEFAULT_POSE = dict(
     bl=-5.0, bk=4.0, fl=5.0, fk=4.0,
     expr="neutral", look=0.0, lookY=0.0, walk=0.0, run=0.0, alpha=1.0,
     hold=None, hold_back=None, blush=0.0, sweat=0.0, mouth=None, hat_off=0.0,
-    idle=1.0, blink=1.0, squash=0.0, prop_angle=0.0,
+    idle=1.0, blink=1.0, squash=0.0, prop_angle=0.0, patch=0.0,
 )
 
 
@@ -68,6 +68,8 @@ class Look:
     belly: float = 0.0
     stick: bool = False      # thin "pure stick" body (no coat), like classic stick-figure horror shorts
     limb: str = None         # limb fill colour; None = solid ink. With a colour, limbs get an ink outline.
+    patch: bool = False      # pirate eye patch (pose param "patch": 0 = front eye covered ... 1 = back eye)
+    beard: str = None        # hex colour for a full beard
     style: str = "classic"   # "ricks": white head, solid black oval eyes, thin limbs, nub hands, capsule torso
 
 
@@ -524,6 +526,33 @@ class Character:
             ctx.move_to(x - dx, by - dy)
             ctx.line_to(x + dx, by + dy)
             ctx.stroke()
+        if lk.beard:
+            ctx.move_to(-r * 0.85, 10)
+            ctx.curve_to(-r * 0.8, r * 1.25, r * 0.95, r * 1.25, r * 0.95, 10)
+            ctx.curve_to(r * 0.5, r * 0.55, -r * 0.4, r * 0.55, -r * 0.85, 10)
+            ctx.close_path()
+            ctx.set_source_rgb(*hexc(lk.beard))
+            ctx.fill_preserve()
+            ctx.set_source_rgb(*INK)
+            ctx.set_line_width(4)
+            ctx.stroke()
+        if lk.patch:
+            v = clamp(P.get("patch", 0.0))
+            px = lerp(pos[1][0], pos[0][0], v)
+            py = lerp(pos[1][1], pos[0][1], v) + (4 if ricks else 0)
+            lift = math.sin(math.pi * v) * 22  # the patch lifts as it moves across
+            ctx.set_source_rgb(*INK)
+            ctx.set_line_width(5)
+            ctx.move_to(-r * 0.98, -r * 0.42)
+            ctx.line_to(px, py - lift)
+            ctx.line_to(r * 0.98, -r * 0.42)
+            ctx.stroke()
+            ctx.save()
+            ctx.translate(px, py - lift)
+            ctx.scale(1, 0.9)
+            ctx.arc(0, 0, 24, 0, 2 * math.pi)
+            ctx.restore()
+            ctx.fill()
         # blush
         b = max(P["blush"], 1.0 if P["expr"] == "embarrassed" else 0.0)
         if b > 0:
@@ -698,6 +727,49 @@ def _hat(ctx, lk, r):
         ctx.fill_preserve()
         ctx.set_source_rgb(*INK)
         ctx.stroke()
+    elif lk.hat == "bandana":
+        ctx.move_to(-r * 0.98, -r * 0.2)
+        ctx.curve_to(-r * 0.95, -r * 1.15, r * 0.95, -r * 1.15, r * 0.98, -r * 0.2)
+        ctx.curve_to(r * 0.5, -r * 0.42, -r * 0.5, -r * 0.42, -r * 0.98, -r * 0.2)
+        ctx.close_path()
+        ctx.set_source_rgb(*c)
+        ctx.fill_preserve()
+        ctx.set_source_rgb(*INK)
+        ctx.stroke()
+        ctx.new_path()
+        for dx in (0, 1):  # white polka dots
+            for k in range(3):
+                ctx.new_sub_path()
+                ctx.arc(-r * 0.5 + k * r * 0.45 + dx * 18, -r * 0.62 - dx * 14, 6, 0, 2 * math.pi)
+        ctx.set_source_rgb(1, 1, 1)
+        ctx.fill()
+        for ang in (200, 225):  # knot tails at the back
+            a = math.radians(ang)
+            ctx.move_to(-r * 0.9, -r * 0.35)
+            ctx.line_to(-r * 0.9 + math.cos(a) * 55, -r * 0.35 - math.sin(a) * 55)
+            ctx.line_to(-r * 0.9 + math.cos(a + 0.35) * 45, -r * 0.35 - math.sin(a + 0.35) * 45)
+            ctx.close_path()
+            ctx.set_source_rgb(*c)
+            ctx.fill_preserve()
+            ctx.set_source_rgb(*INK)
+            ctx.stroke()
+    elif lk.hat == "tricorn":
+        ctx.move_to(-r * 1.35, -r * 0.55)
+        ctx.curve_to(-r * 0.6, -r * 1.7, r * 0.6, -r * 1.7, r * 1.35, -r * 0.55)
+        ctx.curve_to(r * 0.5, -r * 0.85, -r * 0.5, -r * 0.85, -r * 1.35, -r * 0.55)
+        ctx.close_path()
+        ctx.set_source_rgb(*c)
+        ctx.fill_preserve()
+        ctx.set_source_rgb(*hexc(lk.hat_band))
+        ctx.set_line_width(7)
+        ctx.stroke_preserve()
+        ctx.set_source_rgb(*INK)
+        ctx.set_line_width(3)
+        ctx.stroke()
+        # skull badge
+        ctx.arc(0, -r * 1.05, 11, 0, 2 * math.pi)
+        ctx.set_source_rgb(1, 1, 1)
+        ctx.fill()
     elif lk.hat == "kepi":
         ctx.move_to(-r * 0.7, -r * 0.55)
         ctx.line_to(-r * 0.62, -r * 1.45)
@@ -793,6 +865,24 @@ def draw_prop(ctx, name, hand, face, angle, t):
         ctx.fill_preserve()
         ctx.set_source_rgb(*INK)
         ctx.stroke()
+    elif name == "sword":
+        ctx.rotate(math.radians(-60))
+        ctx.move_to(0, -16)
+        ctx.curve_to(60, -26, 150, -30, 200, -8)
+        ctx.curve_to(150, -6, 60, 2, 0, 4)
+        ctx.close_path()
+        ctx.set_source_rgb(*hexc("#d7dde4"))
+        ctx.fill_preserve()
+        ctx.set_source_rgb(*INK)
+        ctx.set_line_width(4)
+        ctx.stroke()
+        ctx.arc(-4, -6, 16, math.radians(90), math.radians(270))
+        ctx.set_source_rgb(*hexc("#d9b44a"))
+        ctx.set_line_width(7)
+        ctx.stroke()
+        ctx.rectangle(-30, -12, 26, 14)
+        ctx.set_source_rgb(*hexc("#5a3320"))
+        ctx.fill()
     elif name == "whistle":
         ctx.rectangle(-4, -14, 34, 16)
         ctx.set_source_rgb(*hexc("#c0c4cc"))
