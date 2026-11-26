@@ -7,7 +7,7 @@ import sys
 ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ROOT)
 from build import load  # noqa: E402
-from engine.filmplan import render_shots, run_checks  # noqa: E402
+from engine.filmplan import render_shots, run_checks, limb_check  # noqa: E402
 from engine.render import qc  # noqa: E402
 
 if __name__ == "__main__":
@@ -29,6 +29,7 @@ if __name__ == "__main__":
                  smooth=not prev)
     print("checks (after render):")
     ok, res = run_checks(ep)
+    ok = limb_check(ep)[0] and ok
     if not ok:
         print("STOP: render-time checks failed.")
         sys.exit(1)

@@ -26,16 +26,20 @@ MEME_FACES = {"shock"}
 
 class FilmScene(Scene):
     def __init__(self, name, lines, draw, set_name, light, cam, anchors, module="sets_pirate", keywords=(),
-                 named=(), exprs=None, exposure=0.0, **kw):
+                 named=(), exprs=None, exposure=0.0, move=None, **kw):
         super().__init__(name, lines, draw, **kw)
         self.set_name, self.light, self.cam_fn, self.anchors_fn = set_name, light, cam, anchors
         self.module, self.keywords, self.named = module, list(keywords), list(named)
         self.exprs = exprs or {}  # {char_name: [expr per line]}
         self.exposure = exposure
+        self.move_fn = move  # optional: Timing -> {object_name: [[t, x, y, z, rot_z], ...]}
         self.shot = None  # engine.film.Shot once rendered
 
     def cam_keys(self):
         return self.cam_fn(Timing(self))
+
+    def move_spec(self):
+        return self.move_fn(Timing(self)) if self.move_fn else {}
 
     def anchor_spec(self):
         return self.anchors_fn(Timing(self))
@@ -52,7 +56,7 @@ def render_shots(ep, workdir, fps=15, w=540, h=960, samples=8, only=None, smooth
         n = int(math.ceil(sc.dur * fps)) + 1
         spec = {"set": sc.set_name, "module": sc.module, "light": sc.light, "out": d, "w": w, "h": h,
                 "samples": samples, "exposure": sc.exposure, "times": [i / fps for i in range(n)],
-                "cam": sc.cam_keys(), "anchors": sc.anchor_spec()}
+                "cam": sc.cam_keys(), "anchors": sc.anchor_spec(), "move": sc.move_spec()}
         key = hashlib.sha1(json.dumps(spec, sort_keys=True).encode()).hexdigest()[:12]
         stamp = os.path.join(d, "spec.key")
         if (only is None or sc.name in only) and not (os.path.exists(stamp) and open(stamp).read() == key):
@@ -147,3 +151,21 @@ def run_checks(ep):
     for name, passed, detail in res:
         print(f"  {'PASS' if passed else 'FAIL'}  {name:42s} {detail}")
     return ok, res
+
+
+def limb_check(ep, step=0.2):
+    """R10: draw a frame every `step` seconds and collect any joint that left its limits (clamped and logged
+    by the rig). Must run after the 3D shots exist. Returns (ok, issues)."""
+    import cairo
+    from . import rig
+    rig.LIMB_ISSUES.clear()
+    surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, 1080, 1920)
+    t = 0.0
+    while t < ep.total:
+        ep.draw_frame(cairo.Context(surf), t)
+        t += step
+    issues = list(rig.LIMB_ISSUES)
+    ok = not issues
+    print(f"  {'PASS' if ok else 'FAIL'}  {'R10 limbs inside joint limits':42s} "
+          f"{'no bad joints' if ok else str(issues[:8]) + (' ...' if len(issues) > 8 else '')}")
+    return ok, issues

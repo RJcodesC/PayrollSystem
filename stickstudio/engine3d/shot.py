@@ -39,7 +39,8 @@ def cam_at(keys, t):
         return Vector(k["loc"]), Vector(k["target"]), k.get("lens", 24)
     for a, b in zip(keys, keys[1:]):
         if a["t"] <= t <= b["t"]:
-            p = ease((t - a["t"]) / max(1e-6, b["t"] - a["t"]))
+            p = (t - a["t"]) / max(1e-6, b["t"] - a["t"])
+            p = max(0.0, min(1.0, p)) if b.get("linear") else ease(p)  # "linear": steady tracking
             la, lb = Vector(a["loc"]), Vector(b["loc"])
             ta, tb = Vector(a["target"]), Vector(b["target"])
             return la.lerp(lb, p), ta.lerp(tb, p), a.get("lens", 24) + (b.get("lens", 24) - a.get("lens", 24)) * p
@@ -146,14 +147,27 @@ def main(spec_path):
     proj = {"frames": []}
     last_pose = None
     last_file = None
+    movers = {n: bpy.data.objects[n] for n in spec.get("move", {})}
     for i, t in enumerate(spec["times"]):
+        moved = []
+        for n, ks in spec.get("move", {}).items():  # keyed object moves: [[t, x, y, z, rot_z_deg], ...]
+            k = ks[-1][1:]
+            if t <= ks[0][0]:
+                k = ks[0][1:]
+            for ka, kb in zip(ks, ks[1:]):
+                if ka[0] <= t <= kb[0]:
+                    p = (t - ka[0]) / max(1e-6, kb[0] - ka[0])  # linear: vehicles keep their speed
+                    k = [ka[j] + (kb[j] - ka[j]) * p for j in range(1, 5)]
+            movers[n].location = k[:3]
+            movers[n].rotation_euler = (0, 0, math.radians(k[3]))
+            moved += [round(v, 3) for v in k]
         loc, tgt, lens = cam_at(spec["cam"], t)
         cam.location = loc
         cam.rotation_euler = (tgt - loc).to_track_quat("-Z", "Y").to_euler()
         cam.data.lens = lens
         bpy.context.view_layer.update()
         pose = (round(loc.x, 4), round(loc.y, 4), round(loc.z, 4), round(tgt.x, 4), round(tgt.y, 4), round(tgt.z, 4),
-                round(lens, 3))
+                round(lens, 3), *moved)
         fname = os.path.join(out, f"frame_{i:05d}.png")
         if pose == last_pose and last_file:
             fname = last_file  # camera at rest: reuse the previous render
@@ -172,7 +186,8 @@ def main(spec_path):
                     x, y, z = ks[0][1:]
                 for ka, kb in zip(ks, ks[1:]):
                     if ka[0] <= t <= kb[0]:
-                        pp = ease((t - ka[0]) / max(1e-6, kb[0] - ka[0]))
+                        pp = (t - ka[0]) / max(1e-6, kb[0] - ka[0])
+                        pp = pp if val.get("linear") else ease(pp)
                         x, y, z = (ka[i] + (kb[i] - ka[i]) * pp for i in (1, 2, 3))
             else:
                 x, y, z, hgt = val

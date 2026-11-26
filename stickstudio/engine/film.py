@@ -110,6 +110,12 @@ class Shot:
             ctx.paint_with_alpha(p)
         ctx.restore()
 
+    def depth(self, name, t):
+        """Camera distance of an anchor (for far-to-near draw order)."""
+        a, b, p = self._index(t)
+        A, B = self.frames[a]["anchors"][name], self.frames[b]["anchors"][name]
+        return A["depth"] + (B["depth"] - A["depth"]) * p
+
     def anchor(self, name, t):
         """Screen position (feet), and rig scale for a character anchored in 3D."""
         a, b, p = self._index(t)
