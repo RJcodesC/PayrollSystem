@@ -30,4 +30,4 @@ REST = dict(ba=-24, bb=10, fa=24, fb=10)                                # arms h
 POINT = dict(hand_f_at=(230, 300), ba=-24, bb=10)                       # straight-arm point forward
 HANDS_UP = dict(hand_f_at=(135, 395), hand_b_at=(-125, 395))            # shock: palms up, out to the sides
 FACEPALM = dict(hand_f_at="face", ba=-24, bb=10)
-SHRUG = dict(hand_f_at=(120, 250), hand_b_at=(-110, 250))               # palms out at waist height
+SHRUG = dict(hand_f_at=(120, 250), hand_b_at=(-62, 185))               # palms out at waist height

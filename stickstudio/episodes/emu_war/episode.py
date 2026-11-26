@@ -121,11 +121,28 @@ def ov(f, warm=0.0):
         f.ctx.fill()
 
 
-def gun_at(f, anchor, s_char, face, fire=0.0, angle=0.0, bipod=True):
-    """Lewis gun at a projected 3D point, scaled to the scene (1.25 m long)."""
-    x, y, _ = f.scene.shot.anchor(anchor, f.gt)
-    sg = s_char * 0.675
-    return lewis_gun(f.ctx, x, y, sg, face=face, angle=angle, t=f.gt, fire=fire, bipod=bipod), (x, y, sg)
+def held_gun(f, x, y, s, face=1, fire=0.0, angle=0.0, bipod=False, crouch=0.5):
+    """Lewis gun carried by a character standing at (x, y) with rig scale s. The grip sits in front of his
+    hip, so the IK arms always reach it naturally. Returns (draw_fn, pose_with_hand_targets)."""
+    legs = 198 * (1 - crouch * 0.42)
+    gx, gy = x + face * 60 * s, y - (legs + 40) * s
+    sg = s * 0.675
+
+    def draw():
+        return lewis_gun(f.ctx, gx, gy, sg, face=face, angle=angle, t=f.gt, fire=fire, bipod=bipod)
+    pts = lewis_gun(cairo.Context(cairo.ImageSurface(cairo.FORMAT_ARGB32, 1, 1)), gx, gy, sg, face=face, angle=angle)
+    return draw, dict(hand_f_at={"world": pts["grip"]}, hand_b_at={"world": pts["fore"]}), (gx, gy, sg)
+
+
+def gunner_with_gun(f, anchor, face=1, fire=0.0, crouch=0.5, lean=12, bounce=0.0, angle=3, expr=None):
+    x, y, s = f.scene.shot.anchor(anchor, f.gt)
+    y -= bounce
+    draw_gun, hands, (gx, gy, sg) = held_gun(f, x, y, s, face, fire, angle, crouch=crouch)
+    shadow(f.ctx, x, y + bounce, s)
+    f.char(GUNNER, dict(x=x, y=y, s=s, idle=0, blink=0, face=face, expr=expr or ex(f, "gunner"), crouch=crouch,
+                        lean=lean, **hands))
+    draw_gun()
+    return gx, gy, sg
 
 
 def bullets_icon(c, x, y, s=1.0):
@@ -172,10 +189,10 @@ GUN_SB = [5.25, 0.15, 0.82, 0.1]
 
 def camA(T):
     tb, tw = T.word(0, "birds"), T.word(1, "won")
-    k = [K(0, (10.5, 4.8, 1.0), (4.6, -0.3, 1.15), 22)]
-    go(k, tb - 0.2, (9.3, 3.7, 1.05), (4.6, -0.3, 1.2), 26)
+    k = [K(0, (8.6, 3.0, 1.55), (4.6, -0.6, 1.15), 24)]
+    go(k, tb - 0.2, (7.9, 2.4, 1.55), (4.6, -0.6, 1.2), 27)
     hold(k, T.line(0)[1] + 0.05)
-    go(k, tw - 0.15, (8.6, 3.1, 1.15), (4.6, -0.1, 1.25), 30)
+    go(k, tw - 0.15, (7.4, 2.0, 1.6), (4.6, -0.5, 1.25), 30)
     hold(k, T.dur + 1)
     return k
 
@@ -192,22 +209,16 @@ def drawA(f):
     tb = T.word(0, "birds")
     st.person(MAJOR, "major", face=1, expr=ex(f, "major"), **(POINT if k == 0 else HANDS_UP))
     st.person(SGT, "sgt", face=1, expr=ex(f, "sgt"), **(REST if k == 0 else HANDS_UP))
-    _, _, sg = f.scene.shot.anchor("gunner", f.gt)
     fire = 1.0 if k == 0 and t > T.word(0, "war") and t < tb - 0.1 else 0.0
 
     def gunner():
-        pts, _ = gun_at(f, "gun", sg, 1, fire=fire, angle=3)
-        x, y, s = f.scene.shot.anchor("gunner", f.gt)
-        shadow(c, x, y, s)
-        f.char(GUNNER, dict(x=x, y=y, s=s, idle=0, blink=0, face=1, expr=ex(f, "gunner"), crouch=0.5, lean=12,
-                            hand_f_at={"world": pts["grip"]}, hand_b_at={"world": pts["fore"]}))
-        gun_at(f, "gun", sg, 1, fire=fire, angle=3)
+        gunner_with_gun(f, "gunner", 1, fire)
     st.extra(f.scene.shot.depth("gunner", f.gt), gunner)
     st.draw()
     # foreground emu leans in from the right and stares them down
     p = EASES["out"](f.r(tb - 0.45, tb - 0.05))
     smug = k == 1
-    EMU.draw(c, dict(x=1500 - 330 * p, y=2350, s=3.1, face=-1, expr="smug" if smug else "stare",
+    EMU.draw(c, dict(x=1560 - 300 * p, y=2330, s=2.7, face=-1, expr="smug" if smug else "stare",
                      head_tilt=-8 if smug else 4, neck=0.95), f.gt)
 
 
@@ -281,9 +292,9 @@ FLEE = [((8, 1.5), (16, 6)), ((9, -1), (15, -8)), ((10.5, 3), (11, 12)), ((11.5,
 def camC(T):
     tt, ts = T.word(0, "three"), T.word(2, "scattered")
     k = [K(0, (5.6, 1.2, 1.7), (0.2, -6.5, 1.4), 20)]
-    go(k, tt - 0.2, (4.4, -0.6, 1.6), (1.6, -3.2, 1.3), 26)   # lands on the three soldiers
+    go(k, tt - 0.2, (5.6, -0.2, 1.7), (1.5, -3.3, 1.25), 22)  # lands on the three soldiers
     hold(k, T.line(1)[1] + 0.05)
-    go(k, ts - 0.2, (3.0, -3.4, 1.45), (12.0, 2.5, 0.8), 20)  # swing round to the field as they open fire
+    go(k, ts - 0.2, (1.6, -4.6, 2.1), (11.0, 2.5, 0.7), 20)   # swing round to the field as they open fire
     hold(k, T.dur + 1)
     return k
 
@@ -317,15 +328,8 @@ def drawC(f):
         fire = 1.0 if T.line(2)[0] < t < ts + 0.6 else 0.0
         st.person(MAJOR, "major", face=1, expr=ex(f, "major"), **POINT)
         st.person(SGT, "sgt", face=1, expr=ex(f, "sgt"), **(HANDS_UP if t > ts else REST))
-        _, _, sg = f.scene.shot.anchor("gunner", f.gt)
-
         def gunner():
-            pts, _ = gun_at(f, "gun", sg, 1, fire=fire, angle=2)
-            x, y, s = f.scene.shot.anchor("gunner", f.gt)
-            shadow(c, x, y, s)
-            f.char(GUNNER, dict(x=x, y=y, s=s, idle=0, blink=0, face=1, expr=ex(f, "gunner"), crouch=0.5, lean=12,
-                                hand_f_at={"world": pts["grip"]}, hand_b_at={"world": pts["fore"]}))
-            gun_at(f, "gun", sg, 1, fire=fire, angle=2)
+            gunner_with_gun(f, "gunner", 1, fire)
         st.extra(f.scene.shot.depth("gunner", f.gt), gunner)
     for i in range(len(FLEE)):
         running = ts - 0.25 < t < ts + 2.4
@@ -383,10 +387,10 @@ def camD(T):
     for i in range(0, int(t1 / 0.5) + 1):
         tt = min(t1, i * 0.5)
         y = truck_y(T, tt)
-        k.append(K(tt, (-4.2, y - 4.5, 1.7), (1.0, y + 3.5, 1.2), 22, linear=True))
+        k.append(K(tt, (-4.6, y - 6.2, 2.0), (1.0, y - 0.5, 1.5), 22, linear=True))
     ys = truck_y(T, t1 + 1.0)
-    k.append(K(t1 + 0.7, (-4.2, ys - 4.5, 1.7), (1.0, ys + 3.5, 1.2), 22, linear=True))
-    go(k, tj - 0.2, (-1.6, ys - 3.6, 2.5), (9.0, ys + 6.0, 0.9), 22)   # over the gunner's shoulder: the flock
+    k.append(K(t1 + 0.7, (-4.6, ys - 6.2, 2.0), (1.0, ys - 0.5, 1.5), 22, linear=True))
+    go(k, tj - 0.2, (-3.0, ys - 7.0, 2.8), (6.5, ys + 5.0, 1.0), 20)   # behind the truck: gunner + the flock
     hold(k, T.dur + 1)
     return k
 
@@ -434,23 +438,17 @@ def drawD(f):
     if k == 2:
         for i in range(10):
             st.emu(FLOCK[5 + i % 11], f"w{i}", face=-1, expr="stare", head_tilt=(i % 3 - 1) * 6)
-    _, _, sg = f.scene.shot.anchor("gunner", f.gt)
     jam = t > tj
     fire = 1.0 if (k == 0 and t > T.word(0, "truck") - 0.2) or (k == 1) else 0.0
     if jam:
         fire = 0.0
 
     def gunner():
-        x, y, s = f.scene.shot.anchor("gunner", f.gt)
-        pts, _ = gun_at(f, "gun", sg, 1, fire=fire, angle=4 + bounce * 0.3, bipod=False)
-        f.char(GUNNER, dict(x=x, y=y - bounce, s=s, idle=0, blink=0, face=1, expr=ex(f, "gunner"),
-                            hand_f_at={"world": pts["grip"]}, hand_b_at={"world": pts["fore"]}))
-        pts, (gx, gy, gs) = gun_at(f, "gun", sg, 1, fire=fire, angle=4 + bounce * 0.3, bipod=False)
+        gx, gy, gs = gunner_with_gun(f, "gunner", 1, fire, crouch=0.3, lean=8, bounce=bounce, angle=4)
         if jam:  # a sad little puff of smoke from the jammed gun
             q = f.r(tj, tj + 1.2)
             for j in range(3):
-                c.arc(gx + 300 * gs * 1.0 + j * 18, gy - 60 * gs - q * 90 - j * 22, 16 + q * 24 + j * 6, 0,
-                      2 * math.pi)
+                c.arc(gx + 300 * gs + j * 18, gy - 60 * gs - q * 90 - j * 22, 16 + q * 24 + j * 6, 0, 2 * math.pi)
                 c.set_source_rgba(0.85, 0.85, 0.85, 0.7 * (1 - q))
                 c.fill()
     st.extra(f.scene.shot.depth("gunner", f.gt), gunner)
@@ -481,9 +479,9 @@ def camE(T):
     hold(k, T.line(1)[1] + 0.05)
     go(k, tt - 0.2, (6.4, -2.6, 1.6), (4.6, -1.0, 1.5), 30)               # on the Major
     hold(k, T.line(2)[1] + 0.05)
-    go(k, ts - 0.2, (10.5, 6.5, 1.5), (0.0, -10.0, 1.3), 20)             # wide: the truck leaves, emus stay
+    go(k, ts - 0.2, (9.5, 13.0, 1.7), (1.5, -8.0, 1.1), 20)              # wide: the truck leaves, emus stay
     hold(k, T.line(3)[1] + 0.05)
-    go(k, tk - 0.2, (8.2, 4.0, 1.55), (4.3, 5.6, 1.45), 30)              # push in on the smug emu
+    go(k, tk - 0.2, (7.6, 8.6, 1.6), (4.3, 5.6, 1.45), 28)               # push in on the smug emu
     hold(k, T.dur + 1)
     return k
 
@@ -578,7 +576,7 @@ SCENES = [
               + [(T.word(0, "birds") - 0.4, "whoosh", 0.8), (T.word(0, "birds"), "dun", 0.7),
                  (T.word(1, "won"), "fail", 0.8)], pad=0.1),
     FilmScene("B_farm", LINES[2:5], drawB, "outback", "golden", camB, anchorsB, module=M, overlay=ovB,
-              keywords=[(1, "fences"), (2, "help")], named=[(2, "farmers", "farmer")],
+              keywords=[(1, "fences"), (2, "help")], named=[(2, "help", "farmer")],
               exprs={"farmer": ["worried", "angry", "sad"]}, trans="cut",
               cues=lambda T: [(0.0, "whoosh", 0.5), (T.word(1, "crops"), "pop", 0.6),
                               (T.word(1, "fences"), "hit", 0.7), (T.word(2, "help"), "ding", 0.5)], pad=0.1),

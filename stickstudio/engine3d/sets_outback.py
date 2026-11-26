@@ -67,7 +67,7 @@ def field_mat():
     return m
 
 
-def wheat_cards(x0, x1, y0, y1, n, seed=1, gap=None, wscale=1.0):
+def wheat_cards(x0, x1, y0, y1, n, seed=1, gap=None, wscale=1.0, clear=()):
     """Thousands of thin golden stalk cards with a seed head, as one mesh."""
     rnd = random.Random(seed)
     me = bpy.data.meshes.new("wheat")
@@ -77,6 +77,8 @@ def wheat_cards(x0, x1, y0, y1, n, seed=1, gap=None, wscale=1.0):
         if gap and gap[0] < y < gap[1] and x < gap[2]:  # trampled patch by the broken fence
             if rnd.random() < 0.8:
                 continue
+        if any(a <= x <= b and c <= y <= d for (a, b, c, d) in clear):  # trampled patches
+            continue
         h = rnd.uniform(0.75, 1.05)
         a = rnd.uniform(0, math.pi)
         lean = rnd.uniform(-0.12, 0.12)
@@ -237,7 +239,7 @@ def build_outback(sc, truck_at=(0, -7, 0), truck_rot=0.0, sandbag=True):
     box((0, 60, 0.01), (5, 260, 0.02), road, bevel=0)
     fld = box((40, 40, 0.03), (72, 140, 0.06), field_mat(), bevel=0)
     fld.location.x = 3.6 + 36
-    wheat_cards(3.7, 13, -14, 40, 42000, seed=3, gap=(9, 16, 7.5))
+    wheat_cards(3.7, 13, -14, 40, 42000, seed=3, gap=(9, 16, 7.5), clear=[(3.6, 6.3, -2.6, 3.4)])
     wheat_cards(13, 40, -14, 75, 30000, seed=4, wscale=3.0)
     fence(3.2, -20, 70)
     if sandbag:
