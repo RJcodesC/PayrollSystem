@@ -47,7 +47,24 @@ DEFAULT_POSE = dict(
     expr="neutral", look=0.0, lookY=0.0, walk=0.0, run=0.0, alpha=1.0,
     hold=None, hold_back=None, blush=0.0, sweat=0.0, mouth=None, hat_off=0.0,
     idle=1.0, blink=1.0, squash=0.0, prop_angle=0.0, patch=0.0,
+    # IK targets: None, a named spot ("chin", "hip", "face", "head_top", "chest"), (fwd, up) in rig units
+    # from the ground point, or {"world": (X, Y)} in screen pixels. Elbows/knees always bend the natural way.
+    hand_f_at=None, hand_b_at=None, foot_f_at=None, foot_b_at=None,
+    crouch=0.0,
 )
+
+# joint limits (degrees). Anything outside is clamped and logged in LIMB_ISSUES (checked before render).
+LIMITS = {"shoulder": (-80.0, 215.0), "elbow": (0.0, 158.0), "hip": (-75.0, 115.0), "knee": (0.0, 150.0)}
+LIMB_ISSUES = []
+
+
+def _clampj(name, joint, val, t, log=True):
+    lo, hi = LIMITS[joint]
+    if val < lo - 1.5 or val > hi + 1.5:
+        if log:
+            LIMB_ISSUES.append((name, round(t, 2), joint, round(val, 1)))
+        return min(hi, max(lo, val))
+    return val
 
 
 @dataclass
@@ -161,6 +178,44 @@ class Character:
             ctx.set_source_rgb(*INK)
             ctx.fill()
 
+    @staticmethod
+    def _ik(root, target, l1, l2, face, bend):
+        """Two-bone IK. bend=+1: arm (forearm swings forward), -1: leg (knee forward, shin back).
+        Returns (a1, a2) absolute limb angles in this rig's convention."""
+        fx, dy = (target[0] - root[0]) * face, target[1] - root[1]
+        D = max(abs(l1 - l2) + 1.0, min(l1 + l2 - 0.5, math.hypot(fx, dy)))
+        th = math.degrees(math.atan2(fx, dy))
+        al = math.degrees(math.acos(max(-1.0, min(1.0, (l1 * l1 + D * D - l2 * l2) / (2 * l1 * D)))))
+        a1 = th - bend * al
+        if a1 < -100:  # straight up can be written as -180 or +180: keep arms/legs in one continuous range
+            a1 += 360
+        ex = root[0] + math.sin(math.radians(a1)) * face * l1
+        ey = root[1] + math.cos(math.radians(a1)) * l1
+        a2 = math.degrees(math.atan2((target[0] - ex) * face, target[1] - ey))
+        while a2 - a1 > 180:
+            a2 -= 360
+        while a2 - a1 < -180:
+            a2 += 360
+        return a1, a2
+
+    def _target(self, spec, P, face, hip, neck, hc):
+        """Resolve an IK target spec to local (unscaled, unflipped) coordinates."""
+        if spec is None:
+            return None
+        if isinstance(spec, dict) and "world" in spec:
+            X, Y = spec["world"]
+            return ((X - P["x"]) / P["s"], (Y - (P["y"] - P["jump"])) / P["s"])
+        r = HEAD_R
+        named = {"chin": (hc[0] + face * r * 0.35, hc[1] + r * 0.95),
+                 "face": (hc[0] + face * r * 1.05, hc[1] + r * 0.2),
+                 "head_top": (hc[0] + face * r * 0.2, hc[1] - r * 1.05),
+                 "hip": (hip[0] + face * 30, hip[1] + 4),
+                 "chest": (neck[0] + face * 40, neck[1] + 40)}
+        if isinstance(spec, str):
+            return named[spec]
+        fwd, up = spec
+        return (fwd * face, -up)
+
     # ------------------------------------------------------------------ pose
     def resolve(self, P, t):
         """Apply procedural layers (idle, walk/run cycles) to a pose dict."""
@@ -209,7 +264,9 @@ class Character:
             ctx.push_group()
 
         legs = (THIGH + SHIN) * lk.height
-        hip = (0.0, -legs + 6 + P["bob"])
+        hip = (0.0, -legs + 6 + P["bob"] + P["crouch"] * legs * 0.42)
+        if P["crouch"] > 0 and P["foot_f_at"] is None and P["foot_b_at"] is None:
+            P["foot_f_at"], P["foot_b_at"] = (30, 0), (-22, 0)  # keep both feet planted
         lean = P["lean"]
         tdx, tdy = math.sin(math.radians(lean)) * face, -math.cos(math.radians(lean))
         tl = TORSO * lk.height
@@ -217,6 +274,22 @@ class Character:
         shoulder = (hip[0] + tdx * (tl - 18), hip[1] + tdy * (tl - 18))
 
         # legs
+        hc0 = (neck[0] + tdx * (HEAD_R - 4), neck[1] + tdy * (HEAD_R - 4))
+        for side in ("b", "f"):
+            tg = self._target(P[f"foot_{side}_at"], P, face, hip, neck, hc0)
+            if tg is not None:
+                a1, a2 = self._ik(hip, tg, THIGH * lk.height, SHIN * lk.height, face, -1)
+                P[f"{side}l"], P[f"{side}k"] = a1, a1 - a2
+            tg = self._target(P[f"hand_{side}_at"], P, face, hip, neck, hc0)
+            if tg is not None:
+                a1, a2 = self._ik(shoulder, tg, UPPER_ARM, FOREARM, face, 1)
+                P[f"{side}a"], P[f"{side}b"] = a1, a2 - a1
+        for side in ("b", "f"):
+            P[f"{side}a"] = _clampj(self.name, "shoulder", P[f"{side}a"], t)
+            P[f"{side}b"] = _clampj(self.name, "elbow", P[f"{side}b"], t)
+            P[f"{side}l"] = _clampj(self.name, "hip", P[f"{side}l"], t)
+            P[f"{side}k"] = _clampj(self.name, "knee", P[f"{side}k"], t)
+
         for (a, k) in ((P["bl"], P["bk"]), (P["fl"], P["fk"])):
             knee, foot = self._limb(ctx, hip, a, THIGH * lk.height, a - k, SHIN * lk.height, face, LIMB_W, "boot")
             self._shoe(ctx, foot, face, a - k)
@@ -935,6 +1008,63 @@ def _hat(ctx, lk, r):
         # skull badge
         ctx.arc(0, -r * 1.05, 11, 0, 2 * math.pi)
         ctx.set_source_rgb(1, 1, 1)
+        ctx.fill()
+    elif lk.hat == "slouch":  # Australian slouch hat: wide brim, left side pinned up, rising-sun badge
+        ctx.move_to(-r * 1.45, -r * 0.5)
+        ctx.curve_to(-r * 0.6, -r * 0.62, r * 0.6, -r * 0.62, r * 1.45, -r * 0.5)
+        ctx.curve_to(r * 1.5, -r * 0.4, r * 0.6, -r * 0.38, 0, -r * 0.4)
+        ctx.curve_to(-r * 0.6, -r * 0.38, -r * 1.5, -r * 0.4, -r * 1.45, -r * 0.5)
+        ctx.close_path()
+        ctx.set_source_rgb(*c)
+        ctx.fill_preserve()
+        ctx.set_source_rgb(*INK)
+        ctx.stroke()
+        ctx.move_to(-r * 0.62, -r * 0.55)  # crown with a pinched top
+        ctx.curve_to(-r * 0.7, -r * 1.3, -r * 0.25, -r * 1.42, 0, -r * 1.25)
+        ctx.curve_to(r * 0.25, -r * 1.42, r * 0.7, -r * 1.3, r * 0.62, -r * 0.55)
+        ctx.close_path()
+        ctx.set_source_rgb(*c)
+        ctx.fill_preserve()
+        ctx.set_source_rgb(*INK)
+        ctx.stroke()
+        ctx.rectangle(-r * 0.64, -r * 0.78, r * 1.28, r * 0.2)  # puggaree band
+        ctx.set_source_rgb(*hexc(lk.hat_band))
+        ctx.fill_preserve()
+        ctx.set_source_rgb(*INK)
+        ctx.stroke()
+        ctx.move_to(-r * 0.62, -r * 0.55)  # brim pinned up at the back side
+        ctx.curve_to(-r * 1.0, -r * 0.8, -r * 1.05, -r * 1.25, -r * 0.8, -r * 1.3)
+        ctx.line_to(-r * 0.58, -r * 0.7)
+        ctx.close_path()
+        ctx.set_source_rgb(*[v * 0.85 for v in c])
+        ctx.fill_preserve()
+        ctx.set_source_rgb(*INK)
+        ctx.stroke()
+        ctx.arc(-r * 0.78, -r * 1.0, 9, 0, 2 * math.pi)
+        ctx.set_source_rgb(*hexc("#e2b341"))
+        ctx.fill()
+    elif lk.hat == "peaked":  # officer's peaked cap
+        ctx.move_to(-r * 0.8, -r * 0.6)
+        ctx.curve_to(-r * 1.0, -r * 1.15, r * 1.0, -r * 1.25, r * 1.05, -r * 0.85)
+        ctx.line_to(r * 0.8, -r * 0.6)
+        ctx.close_path()
+        ctx.set_source_rgb(*c)
+        ctx.fill_preserve()
+        ctx.set_source_rgb(*INK)
+        ctx.stroke()
+        ctx.rectangle(-r * 0.8, -r * 0.78, r * 1.6, r * 0.2)
+        ctx.set_source_rgb(*hexc(lk.hat_band))
+        ctx.fill_preserve()
+        ctx.set_source_rgb(*INK)
+        ctx.stroke()
+        ctx.move_to(r * 0.3, -r * 0.6)  # glossy black peak
+        ctx.curve_to(r * 0.8, -r * 0.62, r * 1.25, -r * 0.5, r * 1.3, -r * 0.4)
+        ctx.line_to(r * 0.3, -r * 0.48)
+        ctx.close_path()
+        ctx.set_source_rgb(*INK)
+        ctx.fill()
+        ctx.arc(r * 0.1, -r * 0.95, 9, 0, 2 * math.pi)
+        ctx.set_source_rgb(*hexc("#e2b341"))
         ctx.fill()
     elif lk.hat == "kepi":
         ctx.move_to(-r * 0.7, -r * 0.55)
