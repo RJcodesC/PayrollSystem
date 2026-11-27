@@ -82,11 +82,20 @@ def wheat_cards(x0, x1, y0, y1, n, seed=1, gap=None, wscale=1.0, clear=()):
         h = rnd.uniform(0.75, 1.05)
         a = rnd.uniform(0, math.pi)
         lean = rnd.uniform(-0.12, 0.12)
-        dx, dy = math.cos(a) * 0.009 * wscale, math.sin(a) * 0.009 * wscale
+        dx, dy = math.cos(a) * 0.004 * wscale, math.sin(a) * 0.004 * wscale
         tx, ty = lean * h, lean * h * 0.5
         v = [bm.verts.new((x - dx, y - dy, 0)), bm.verts.new((x + dx, y + dy, 0)),
-             bm.verts.new((x + dx * 2.2 + tx, y + dy * 2.2 + ty, h)), bm.verts.new((x - dx * 2.2 + tx, y - dy * 2.2 + ty, h))]
+             bm.verts.new((x + dx + tx, y + dy + ty, h)), bm.verts.new((x - dx + tx, y - dy + ty, h))]
         bm.faces.new(v)
+        # seed head: a plump spindle tipping over in the lean direction
+        hx, hy = x + tx, y + ty
+        nod = rnd.uniform(0.05, 0.12)
+        hw = 0.016 * wscale
+        hd = [bm.verts.new((hx - dx * 0.5, hy - dy * 0.5, h)),
+              bm.verts.new((hx + math.cos(a) * hw + tx * 0.1, hy + math.sin(a) * hw, h + 0.07)),
+              bm.verts.new((hx + lean * 0.6 + nod * 0.3, hy + lean * 0.3, h + 0.15)),
+              bm.verts.new((hx - math.cos(a) * hw + tx * 0.1, hy - math.sin(a) * hw, h + 0.07))]
+        bm.faces.new(hd)
     bm.to_mesh(me)
     bm.free()
     o = bpy.data.objects.new("wheat", me)
@@ -195,6 +204,23 @@ def sandbags(x, y0, y1):
             o.rotation_euler = (0, 0, R(90))
 
 
+def half_tube(center, r, width, m):
+    """Upper half of a tube along x (a mudguard): a cylinder with its lower half cut away."""
+    bpy.ops.mesh.primitive_cylinder_add(location=center, radius=r, depth=width, rotation=(0, R(90), 0), vertices=32)
+    o = bpy.context.object
+    bm = bmesh.new()
+    bm.from_mesh(o.data)
+    bmesh.ops.bisect_plane(bm, geom=bm.verts[:] + bm.edges[:] + bm.faces[:], plane_co=(0, 0, 0),
+                           plane_no=(1, 0, 0), clear_outer=True)  # local x = world -z after the rotation
+    bm.to_mesh(o.data)
+    bm.free()
+    sol = o.modifiers.new("shell", "SOLIDIFY")
+    sol.thickness = 0.03
+    o.data.materials.append(m)
+    bpy.ops.object.shade_smooth()
+    return o
+
+
 def truck():
     """1930s army truck: cab, long bonnet, round mudguards, flat tray. Built at the origin facing +y,
     joined into one object named 'truck'."""
@@ -220,7 +246,15 @@ def truck():
     for (wy, wx) in ((1.7, 0.85), (1.7, -0.85), (-2.3, 0.9), (-2.3, -0.9)):
         cyl((wx, wy, 0.45), 0.45, 0.3, dark, rot=(0, R(90), 0), verts=24)
         cyl((wx + math.copysign(0.16, wx), wy, 0.45), 0.2, 0.04, chrome, rot=(0, R(90), 0), verts=16)
-        box((wx, wy, 0.98), (0.36, 1.1, 0.06), olive, bevel=0.02)  # mudguard over each wheel
+        half_tube((wx, wy, 0.45), 0.6, 0.38, olive)  # curved mudguard hugging the top of each wheel
+    for s in (-1, 1):
+        box((s * 0.88, 0.0, 0.62), (0.3, 3.0, 0.05), olive, bevel=0.01)       # running boards
+    box((0, 2.55, 0.62), (1.9, 0.1, 0.12), chrome, bevel=0.02)                # front bumper
+    cyl((-1.12, -0.6, 1.0), 0.42, 0.22, dark, rot=(0, R(90), 0), verts=24)    # spare wheel on the side
+    lamp = mat("headlamp", (1, 0.95, 0.8), 0.1, emit=((1, 0.92, 0.7), 2.5))
+    for s in (-1, 1):
+        cyl((s * 0.45, 2.52, 1.25), 0.09, 0.02, lamp, rot=(R(90), 0, 0))
+    box((0, 0.3, 2.24), (1.7, 1.25, 0.08), noise_mat("canvas", (0.5, 0.48, 0.34), (0.6, 0.57, 0.42), 9), bevel=0.04)
     new = [o for o in bpy.data.objects if o not in before]
     for o in bpy.data.objects:
         o.select_set(o in new)
@@ -236,10 +270,12 @@ def build_outback(sc, truck_at=(0, -7, 0), truck_rot=0.0, sandbag=True):
     road = noise_mat("road", (0.62, 0.3, 0.13), (0.78, 0.44, 0.22), 1.5, detail=8)
     bpy.ops.mesh.primitive_plane_add(size=600, location=(0, 100, 0))
     bpy.context.object.data.materials.append(dirt)
-    box((0, 60, 0.01), (5, 260, 0.02), road, bevel=0)
+    bpy.context.object["ground"] = True
+    box((0, 60, 0.01), (5, 260, 0.02), road, bevel=0)["ground"] = True
     fld = box((40, 40, 0.03), (72, 140, 0.06), field_mat(), bevel=0)
     fld.location.x = 3.6 + 36
-    wheat_cards(3.7, 13, -14, 40, 42000, seed=3, gap=(9, 16, 7.5), clear=[(3.6, 6.3, -2.6, 3.4)])
+    fld["ground"] = True
+    wheat_cards(3.7, 13, -14, 40, 52000, seed=3, gap=(9, 16, 7.5), clear=[(3.6, 6.3, -2.6, 3.4)])
     wheat_cards(13, 40, -14, 75, 30000, seed=4, wscale=3.0)
     fence(3.2, -20, 70)
     if sandbag:
@@ -271,7 +307,32 @@ def build_outback(sc, truck_at=(0, -7, 0), truck_rot=0.0, sandbag=True):
     ramp.color_ramp.elements[1].color = (0.18, 0.45, 0.95, 1)
     nt.links.new(tc.outputs["Generated"], sep.inputs[0])
     nt.links.new(sep.outputs[2], ramp.inputs["Fac"])
-    nt.links.new(ramp.outputs["Color"], bg.inputs["Color"])
+    # soft fair-weather clouds: noise on the view direction, only above the horizon
+    cl = nt.nodes.new("ShaderNodeTexNoise")
+    cl.inputs["Scale"].default_value = 2.2
+    cl.inputs["Detail"].default_value = 4.0
+    cl.inputs["Roughness"].default_value = 0.55
+    nt.links.new(tc.outputs["Generated"], cl.inputs["Vector"])
+    cr = nt.nodes.new("ShaderNodeValToRGB")
+    cr.color_ramp.elements[0].position = 0.56
+    cr.color_ramp.elements[0].color = (0, 0, 0, 1)
+    cr.color_ramp.elements[1].position = 0.72
+    cr.color_ramp.elements[1].color = (1, 1, 1, 1)
+    nt.links.new(cl.outputs["Fac"], cr.inputs["Fac"])
+    band = nt.nodes.new("ShaderNodeMapRange")  # clouds fade in a little above the horizon
+    band.inputs["From Min"].default_value = 0.03
+    band.inputs["From Max"].default_value = 0.2
+    nt.links.new(sep.outputs[2], band.inputs["Value"])
+    amt = nt.nodes.new("ShaderNodeMath")
+    amt.operation = "MULTIPLY"
+    nt.links.new(cr.outputs["Color"], amt.inputs[0])
+    nt.links.new(band.outputs["Result"], amt.inputs[1])
+    mixc = nt.nodes.new("ShaderNodeMix")
+    mixc.data_type = "RGBA"
+    nt.links.new(amt.outputs[0], mixc.inputs["Factor"])
+    nt.links.new(ramp.outputs["Color"], mixc.inputs[6])
+    mixc.inputs[7].default_value = (1.0, 0.95, 0.88, 1)
+    nt.links.new(mixc.outputs[2], bg.inputs["Color"])
 
 
 SETS = {

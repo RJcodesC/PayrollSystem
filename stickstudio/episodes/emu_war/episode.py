@@ -20,6 +20,7 @@ from engine.audio import edge_voice  # noqa: E402
 from engine.core import pulse, EASES, clamp, hexc  # noqa: E402
 from engine.creatures import Emu, lewis_gun  # noqa: E402
 from engine.filmplan import FilmScene  # noqa: E402
+from engine.film import composite_character  # noqa: E402
 from engine.render import Episode, N, label  # noqa: E402
 from engine.text import text_center  # noqa: E402
 
@@ -72,10 +73,17 @@ def shadow(c, x, y, s, w=95):
 
 
 class Stage:
-    """Collects puppets for one frame and draws them far-to-near (correct overlaps)."""
+    """Collects puppets for one frame and draws them far-to-near. Each one is lit to match the shot and
+    masked by the 3D scene's object depth, so the truck, sandbags, fence and wheat in front of it hide it."""
 
     def __init__(self, f):
         self.f, self.items = f, []
+
+    def _add(self, anchor, fn, depth=None):
+        sh = self.f.scene.shot
+        d = sh.depth(anchor, self.f.gt) if depth is None else depth
+        x, y, s = sh.anchor(anchor, self.f.gt)
+        self.items.append((d, fn, y, s * 560))
 
     def person(self, ch, anchor, **pose):
         def draw():
@@ -84,7 +92,7 @@ class Stage:
             p = dict(x=x, y=y, s=s, idle=0, blink=0)
             p.update(pose)
             self.f.char(ch, p)
-        self.items.append((self.f.scene.shot.depth(anchor, self.f.gt), draw))
+        self._add(anchor, draw)
 
     def emu(self, emu, anchor, face=None, **pose):
         def draw():
@@ -98,14 +106,15 @@ class Stage:
             p = dict(x=x, y=y, s=s * EMU_DRAW, face=fc)
             p.update(pose)
             emu.draw(self.f.ctx, p, self.f.gt)
-        self.items.append((self.f.scene.shot.depth(anchor, self.f.gt), draw))
+        self._add(anchor, draw)
 
-    def extra(self, depth, fn):
-        self.items.append((depth, fn))
+    def extra(self, anchor, fn):
+        self._add(anchor, fn)
 
     def draw(self):
-        for _, fn in sorted(self.items, key=lambda it: -it[0]):
-            fn()
+        sh = self.f.scene.shot
+        for d, fn, fy, hgt in sorted(self.items, key=lambda it: -it[0]):
+            composite_character(self.f.ctx, sh, self.f.gt, d, fn, self.f.scene.light, fy, hgt)
 
 
 def ov(f, warm=0.0):
@@ -213,7 +222,7 @@ def drawA(f):
 
     def gunner():
         gunner_with_gun(f, "gunner", 1, fire)
-    st.extra(f.scene.shot.depth("gunner", f.gt), gunner)
+    st.extra("gunner", gunner)
     st.draw()
     # foreground emu leans in from the right and stares them down
     p = EASES["out"](f.r(tb - 0.45, tb - 0.05))
@@ -330,7 +339,7 @@ def drawC(f):
         st.person(SGT, "sgt", face=1, expr=ex(f, "sgt"), **(HANDS_UP if t > ts else REST))
         def gunner():
             gunner_with_gun(f, "gunner", 1, fire)
-        st.extra(f.scene.shot.depth("gunner", f.gt), gunner)
+        st.extra("gunner", gunner)
     for i in range(len(FLEE)):
         running = ts - 0.25 < t < ts + 2.4
         st.emu(FLOCK[i], f"f{i}", run=2.6 if running else 0, dust=1 if running else 0,
@@ -451,7 +460,7 @@ def drawD(f):
                 c.arc(gx + 300 * gs + j * 18, gy - 60 * gs - q * 90 - j * 22, 16 + q * 24 + j * 6, 0, 2 * math.pi)
                 c.set_source_rgba(0.85, 0.85, 0.85, 0.7 * (1 - q))
                 c.fill()
-    st.extra(f.scene.shot.depth("gunner", f.gt), gunner)
+    st.extra("gunner", gunner)
     st.draw()
 
 
@@ -559,12 +568,19 @@ for i, txt in enumerate(TEXT):
     LINES.append(ln)
 
 
-def burst(t0, t1, gain=0.45):
+def burst(t0, t1, gain=0.9):
+    """Lewis-gun fire from t0 to t1, built from real burst samples (1 s / 0.5 s chunks)."""
     out, t = [], t0
-    while t < t1:
-        out.append((t, "hit", gain))
-        t += 0.085
+    while t1 - t >= 0.95:
+        out.append((t, "mg1", gain))
+        t += 1.0
+    if t1 - t > 0.2:
+        out.append((t, "mg05", gain))
     return out
+
+
+def bed(T):
+    return [(0.0, "wind", 0.55)]
 
 
 SCENES = [
@@ -572,37 +588,40 @@ SCENES = [
               keywords=[(0, "birds"), (1, "won")], named=[(0, "Australia", "major")],
               exprs={"major": ["angry", "shock"], "sgt": ["angry", "worried"], "gunner": ["angry", "worried"]},
               exposure=0.0,
-              cues=lambda T: burst(T.word(0, "war"), T.word(0, "birds") - 0.1)
-              + [(T.word(0, "birds") - 0.4, "whoosh", 0.8), (T.word(0, "birds"), "dun", 0.7),
-                 (T.word(1, "won"), "fail", 0.8)], pad=0.1),
+              cues=lambda T: bed(T) + burst(T.word(0, "war"), T.word(0, "birds") - 0.1)
+              + [(T.word(0, "birds") - 0.4, "whoosh", 0.7), (T.word(0, "birds") - 0.05, "emu", 1.0),
+                 (T.word(1, "won"), "fail", 0.7)], pad=0.1),
     FilmScene("B_farm", LINES[2:5], drawB, "outback", "golden", camB, anchorsB, module=M, overlay=ovB,
               keywords=[(1, "fences"), (2, "help")], named=[(2, "help", "farmer")],
               exprs={"farmer": ["worried", "angry", "sad"]}, trans="cut",
-              cues=lambda T: [(0.0, "whoosh", 0.5), (T.word(1, "crops"), "pop", 0.6),
-                              (T.word(1, "fences"), "hit", 0.7), (T.word(2, "help"), "ding", 0.5)], pad=0.1),
+              cues=lambda T: bed(T) + [(0.0, "whoosh", 0.4), (T.word(1, "crops"), "emu", 0.7),
+                                       (T.word(1, "fences"), "creak", 0.8), (T.word(1, "fences") + 0.1, "stamp", 0.6),
+                                       (T.word(2, "help"), "ding", 0.4)], pad=0.1),
     FilmScene("C_army", LINES[5:8], drawC, "outback", "golden", camC, anchorsC, module=M, overlay=ovC,
               camera=shakeC, keywords=[(0, "three"), (2, "scattered")], named=[(0, "soldiers", "sgt")],
               exprs={"major": ["smug", "smug", "angry"], "sgt": ["neutral", "neutral", "worried"],
                      "gunner": ["neutral", "smug", "angry"]}, trans="cut",
-              cues=lambda T: [(T.word(0, "three") + 0.15, "crickets", 0.7), (T.line(1)[0], "pop", 0.6),
-                              (T.word(1, "Ten"), "chaching", 0.5)]
+              cues=lambda T: bed(T) + [(0.0, "engine", 0.35), (T.word(0, "three") + 0.15, "crickets", 0.6),
+                                       (T.line(1)[0], "pop", 0.5), (T.word(1, "Ten"), "shells", 0.8)]
               + burst(T.line(2)[0], T.word(2, "scattered") + 0.6)
-              + [(T.word(2, "scattered"), "run", 0.8)], pad=0.1),
+              + [(T.word(2, "scattered") + 0.6, "shells", 0.6), (T.word(2, "scattered"), "run", 0.8)], pad=0.1),
     FilmScene("D_truck", LINES[8:11], drawD, "outback_road", "golden", camD, anchorsD, module=M, overlay=ovD,
               camera=shakeD, move=moveD, keywords=[(2, "jammed")], named=[(0, "truck", "gunner")],
               exprs={"gunner": ["angry", "shock", "sad"]}, trans="whip",
-              cues=lambda T: [(0.0, "run", 0.6), (T.word(0, "truck"), "whoosh", 0.6)]
-              + burst(T.word(0, "truck") - 0.2, T.line(1)[1], 0.35)
-              + [(T.word(1, "outran"), "boing", 0.7), (T.word(2, "jammed"), "clink", 1.0),
-                 (T.word(2, "jammed") + 0.2, "fail", 0.8)], pad=0.1),
+              cues=lambda T: bed(T) + [(0.0, "engine", 0.8), (0.0, "run", 0.5)]
+              + burst(T.word(0, "truck") - 0.2, T.line(1)[1], 0.7)
+              + [(T.word(1, "outran"), "whoosh", 0.8), (T.word(1, "outran") + 0.2, "run", 0.7),
+                 (T.word(2, "jammed") - 0.05, "jam", 1.0), (T.word(2, "jammed") + 0.9, "crickets", 0.5)],
+              pad=0.1),
     FilmScene("E_sunset", LINES[11:16], drawE, "outback", "sunset", camE, anchorsE, module=M, overlay=ovE,
               move=moveE, keywords=[(0, "thousand"), (2, "tanks"), (3, "stayed"), (4, "fake")],
               exprs={"major": ["sad", "sad", "angry", "sad", "sad"], "sgt": ["sad"] * 5, "gunner": ["sad"] * 5},
               exposure=0.1, trans="cut",
-              cues=lambda T: [(T.line(0)[0], "tick", 0.6), (T.word(0, "bullets"), "chaching", 0.5),
-                              (T.word(1, "emu"), "pop", 0.7), (T.word(2, "tanks"), "dun", 0.8),
-                              (T.line(3)[0], "whoosh", 0.4), (T.word(3, "stayed"), "reveal", 0.7),
-                              (T.word(4, "Follow"), "ding", 0.5)], pad=0.8),
+              cues=lambda T: bed(T) + [(T.line(0)[0], "shells", 0.7), (T.line(0)[0] + 0.7, "shells", 0.5),
+                                       (T.word(1, "emu"), "pop", 0.6), (T.word(2, "tanks"), "dun", 0.8),
+                                       (T.line(3)[0], "engine", 0.5), (T.word(3, "stayed"), "emu", 1.0),
+                                       (T.word(3, "stayed") + 0.3, "reveal", 0.5),
+                                       (T.word(4, "Follow"), "ding", 0.4)], pad=0.8),
 ]
 
 EPISODE = Episode("emu_war", SCENES, music="caper", music_gain=0.13, caption_style="ricks", caption_y=1440,

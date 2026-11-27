@@ -549,3 +549,123 @@ def creature_voice(text, voice="am_echo", speed=0.8):
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", raw, "-filter_complex", fc, "-map", "[o]", out],
                        check=True)
     return out
+
+
+# ------------------------------------------------------------------ outback / war kit (Emu War v2)
+def _bp(x, lo, hi, order=2):
+    from scipy.signal import butter, sosfilt
+    sos = butter(order, [lo, hi], btype="band", fs=SR, output="sos")
+    return sosfilt(sos, x).astype(np.float32)
+
+
+def _lpf(x, f, order=2):
+    from scipy.signal import butter, sosfilt
+    return sosfilt(butter(order, f, btype="low", fs=SR, output="sos"), x).astype(np.float32)
+
+
+def _room(x, decay=0.18, mix=0.25):
+    """Cheap outdoor slap/reverb: a few decaying echoes."""
+    y = x.copy()
+    for k, (dl, g) in enumerate(((0.043, 0.5), (0.071, 0.35), (0.113, 0.25), (0.167, 0.15))):
+        i = int(dl * SR)
+        y[i:] += x[:-i] * g * mix * 4 * math.exp(-dl / decay)
+    return y
+
+
+def sfx_mg(d=1.0, rate=9.5, seed=0):
+    """Lewis gun burst: per shot a sharp crack, a chesty thump and a mechanical clack, with outdoor slap."""
+    n = int((d + 0.4) * SR)
+    out = np.zeros(n, np.float32)
+    rng = np.random.default_rng(seed)
+    k = 0
+    while k / rate < d:
+        i = max(0, int((k / rate + rng.uniform(-0.004, 0.004)) * SR))
+        crack = _bp(_noise(int(0.06 * SR), seed + k), 1200, 7000) * _env(int(0.06 * SR), 0.0005, 0.012)
+        tt = _t(0.12)
+        thump = np.sin(2 * np.pi * np.cumsum(160 * np.exp(-tt * 40) + 55) / SR) * _env(len(tt), 0.0008, 0.035)
+        clack = _bp(_noise(int(0.03 * SR), seed + 100 + k), 2500, 5000) * _env(int(0.03 * SR), 0.0005, 0.006)
+        seg = np.zeros(int(0.12 * SR), np.float32)
+        seg[:len(crack)] += crack * 1.6
+        seg += thump * 1.0
+        j = int(0.045 * SR)
+        seg[j:j + len(clack)] += clack * 0.5
+        seg *= rng.uniform(0.85, 1.0)
+        L = max(0, min(len(seg), n - i))
+        out[i:i + L] += seg[:L]
+        k += 1
+    out = _room(out, 0.2, 0.3)
+    return (out / (np.max(np.abs(out)) + 1e-9) * 0.9).astype(np.float32)
+
+
+def sfx_engine(d=6.0):
+    """1930s truck: lumpy low-rev four-cylinder rumble with gear whine and road rattle."""
+    t = _t(d)
+    rpm = 22 + 6 * np.minimum(1, t / 1.5)
+    ph = 2 * np.pi * np.cumsum(rpm) / SR
+    lump = np.sign(np.sin(ph)) * 0.5 + np.sin(ph * 2) * 0.3 + np.sin(ph * 0.5) * 0.25
+    body = _lpf(lump.astype(np.float32), 260)
+    rattle = _bp(_noise(len(t), 7), 900, 3000) * (0.08 + 0.06 * np.abs(np.sin(ph * 0.25)))
+    whine = np.sin(2 * np.pi * np.cumsum(rpm * 14) / SR) * 0.03
+    x = body + rattle + whine
+    fade = np.minimum(1, t / 0.4) * np.minimum(1, (d - t) / 0.8)
+    return (x * fade / (np.max(np.abs(x)) + 1e-9) * 0.8).astype(np.float32)
+
+
+def sfx_wind(d=14.0):
+    """Outback ambience: soft gusty wind and a couple of far-off birds."""
+    t = _t(d)
+    nz = _noise(len(t), 33)
+    gust = 0.55 + 0.45 * np.sin(2 * np.pi * 0.13 * t) * np.sin(2 * np.pi * 0.051 * t + 1)
+    w = _bp(nz, 180, 1100) * gust
+    birds = np.zeros(len(t), np.float32)
+    for tc in (2.1, 2.35, 7.8, 8.0, 11.4):
+        i = int(tc * SR)
+        tt = _t(0.14)
+        chirp = np.sin(2 * np.pi * np.cumsum(2600 + 900 * np.sin(tt * 60)) / SR) * _env(len(tt), 0.01, 0.05)
+        birds[i:i + len(tt)] += chirp[:max(0, len(t) - i)] * 0.12
+    x = w + birds
+    fade = np.minimum(1, t / 1.0) * np.minimum(1, (d - t) / 1.0)
+    return (x * fade / (np.max(np.abs(x)) + 1e-9) * 0.6).astype(np.float32)
+
+
+def sfx_emu():
+    """Emus make a deep drumming/booming sound: three low thrums."""
+    out = np.zeros(int(1.3 * SR), np.float32)
+    for k, st in enumerate((0.0, 0.33, 0.66)):
+        tt = _t(0.4)
+        f = 62 - k * 4
+        thr = np.sin(2 * np.pi * f * tt) * (0.6 + 0.4 * np.sin(2 * np.pi * 9 * tt)) * _env(len(tt), 0.03, 0.15)
+        i = int(st * SR)
+        out[i:i + len(tt)] += thr
+    out += _lpf(_noise(len(out), 4), 200) * 0.05
+    return (out / (np.max(np.abs(out)) + 1e-9) * 0.9).astype(np.float32)
+
+
+def sfx_shells(n=9, seed=2):
+    """Brass casings tinkling onto dirt."""
+    rng = np.random.default_rng(seed)
+    out = np.zeros(int(1.4 * SR), np.float32)
+    for k in range(n):
+        tt = _t(0.25)
+        f = rng.uniform(3200, 5200)
+        ping = (np.sin(2 * np.pi * f * tt) + 0.5 * np.sin(2 * np.pi * f * 2.76 * tt)) * _env(len(tt), 0.0005, 0.04)
+        i = int((k * 0.11 + rng.uniform(0, 0.05)) * SR)
+        out[i:i + len(tt)] += ping * rng.uniform(0.4, 1.0)
+    return (out / (np.max(np.abs(out)) + 1e-9) * 0.7).astype(np.float32)
+
+
+def sfx_jam():
+    """Dry fire: a hollow metallic click... then another one."""
+    out = np.zeros(int(0.8 * SR), np.float32)
+    for st in (0.0, 0.42):
+        c = _bp(_noise(int(0.05 * SR), int(st * 10) + 9), 1800, 6000) * _env(int(0.05 * SR), 0.0003, 0.008)
+        tt = _t(0.05)
+        body = np.sin(2 * np.pi * 900 * tt) * _env(len(tt), 0.0003, 0.012) * 0.4
+        i = int(st * SR)
+        out[i:i + len(c)] += c + body
+    return (out / (np.max(np.abs(out)) + 1e-9) * 0.9).astype(np.float32)
+
+
+SFX.update({"mg1": lambda: sfx_mg(1.0, seed=1), "mg2": lambda: sfx_mg(2.0, seed=2), "mg05": lambda: sfx_mg(0.5, seed=3),
+            "engine": lambda: sfx_engine(6.0), "wind": lambda: sfx_wind(14.0), "emu": sfx_emu,
+            "shells": sfx_shells, "jam": sfx_jam})

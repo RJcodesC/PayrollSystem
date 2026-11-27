@@ -79,9 +79,9 @@ def lighting(preset):
     return haze, haze_col
 
 
-def depth_material():
-    """Emission shader whose brightness = camera depth / 200 m (rendered with a Standard view transform)."""
-    m = bpy.data.materials.new("depth_override")
+def depth_material(scale=200.0):
+    """Emission shader whose brightness = camera depth / scale m (rendered with a Standard view transform)."""
+    m = bpy.data.materials.new(f"depth_override_{int(scale)}")
     m.use_nodes = True
     nt = m.node_tree
     for n in list(nt.nodes):
@@ -89,7 +89,7 @@ def depth_material():
     cd = nt.nodes.new("ShaderNodeCameraData")
     dv = nt.nodes.new("ShaderNodeMath")
     dv.operation = "DIVIDE"
-    dv.inputs[1].default_value = 200.0
+    dv.inputs[1].default_value = scale
     em = nt.nodes.new("ShaderNodeEmission")
     out = nt.nodes.new("ShaderNodeOutputMaterial")
     nt.links.new(cd.outputs["View Z Depth"], dv.inputs[0])
@@ -98,20 +98,31 @@ def depth_material():
     return m
 
 
-def depth_pass(sc, vl, dmat, fname):
-    """Depth for haze: 1 sample, emission override, linear output, transparent sky."""
+def depth_pass(sc, vl, dmat, path, bits16=False, hide=()):
+    """1-sample emission-override depth render. Haze pass: 8-bit RGBA, /200 m. Occlusion pass: 16-bit grey,
+    /60 m, with the ground objects hidden so only things standing up (truck, wheat, sandbags...) occlude."""
     keep = (sc.cycles.samples, sc.cycles.use_denoising, sc.view_settings.view_transform,
-            sc.view_settings.look, sc.view_settings.exposure)
+            sc.view_settings.look, sc.view_settings.exposure, sc.render.image_settings.color_mode,
+            sc.render.image_settings.color_depth, sc.render.filter_size)
     sc.cycles.samples, sc.cycles.use_denoising = 1, False
     sc.view_settings.view_transform, sc.view_settings.exposure = "Standard", 0.0
     sc.render.film_transparent = True
+    if bits16:
+        sc.render.image_settings.color_mode = "BW"
+        sc.render.image_settings.color_depth = "16"
+        sc.render.filter_size = 0.01  # no edge blending: hard, exact occlusion edges
+    for o in hide:
+        o.hide_render = True
     vl.material_override = dmat
-    sc.render.filepath = fname.replace(".png", "_depth.png")
+    sc.render.filepath = path
     bpy.ops.render.render(write_still=True)
     vl.material_override = None
+    for o in hide:
+        o.hide_render = False
     sc.render.film_transparent = False
-    (sc.cycles.samples, sc.cycles.use_denoising, sc.view_settings.view_transform,
-     sc.view_settings.look, sc.view_settings.exposure) = keep
+    (sc.cycles.samples, sc.cycles.use_denoising, sc.view_settings.view_transform, sc.view_settings.look,
+     sc.view_settings.exposure, sc.render.image_settings.color_mode, sc.render.image_settings.color_depth,
+     sc.render.filter_size) = keep
 
 
 def main(spec_path):
@@ -127,6 +138,8 @@ def main(spec_path):
     else:
         haze, haze_col = lighting(preset)
     dmat = depth_material()
+    omat = depth_material(60.0)
+    ground = [o for o in bpy.data.objects if o.get("ground")]
     vl = sc.view_layers[0]
     bpy.ops.object.camera_add()
     cam = bpy.context.object
@@ -175,8 +188,10 @@ def main(spec_path):
             sc.render.filepath = fname
             bpy.ops.render.render(write_still=True)
             last_pose, last_file = pose, fname
-            if haze > 0:  # the depth pass only feeds the haze; skip it for indoor rigs without haze
-                depth_pass(sc, vl, dmat, fname)
+            if haze > 0:  # haze depth
+                depth_pass(sc, vl, dmat, fname.replace(".png", "_depth.png"))
+            if spec.get("occlusion", True):  # object depth for compositing 2D characters behind 3D things
+                depth_pass(sc, vl, omat, fname.replace(".png", "_occ.png"), bits16=True, hide=ground)
         anchors = {}
         for name, val in spec.get("anchors", {}).items():
             if isinstance(val, dict):  # moving anchor: eased between keys

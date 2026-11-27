@@ -144,3 +144,88 @@ def bake_smooth(directory, src_fps=15):
                     f"minterpolate=fps={SMOOTH_FPS}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1",
                     os.path.join(out, "%05d.png")], check=True)
     return len(os.listdir(out))
+
+
+# ---------------------------------------------------------------- occlusion (2D characters behind 3D objects)
+def _srgb_decode(v):
+    return np.where(v <= 0.04045, v / 12.92, ((v + 0.055) / 1.055) ** 2.4)
+
+
+def _occ_depth(self, t):
+    """Object depth (metres, planar camera z) for the 3D frame nearest to global time t; inf = nothing there."""
+    a, b, p = self._index(t)
+    fr = self.frames[b if p >= 0.5 else a]["file"]
+    path = os.path.join(self.dir, fr.replace(".png", "_occ.png"))
+    if path in self._occ_cache:
+        return self._occ_cache[path]
+    if not os.path.exists(path):
+        self._occ_cache[path] = None
+        return None
+    v = np.asarray(Image.open(path)).astype(np.float32) / 65535.0
+    d = _srgb_decode(v) * 60.0
+    d = np.where((v <= 0.0) | (v >= 0.9999), np.inf, d).astype(np.float32)
+    if len(self._occ_cache) > 8:
+        self._occ_cache.pop(next(iter(self._occ_cache)))
+    self._occ_cache[path] = d
+    return d
+
+
+def _occ_mask(self, t, depth):
+    """A8 cairo surface: opaque where the character at `depth` is visible, clear where a 3D object is closer."""
+    d = self.occ_depth(t)
+    if d is None:
+        return None
+    tol = 0.22 + 0.035 * depth
+    vis = (d >= depth - tol).astype(np.uint8) * 255
+    h, w = vis.shape
+    stride = cairo.ImageSurface.format_stride_for_width(cairo.FORMAT_A8, w)
+    buf = np.zeros((h, stride), np.uint8)
+    buf[:, :w] = vis
+    return cairo.ImageSurface.create_for_data(bytearray(buf.tobytes()), cairo.FORMAT_A8, w, h, stride)
+
+
+Shot.occ_depth = _occ_depth
+Shot.occ_mask = _occ_mask
+_orig_init = Shot.__init__
+
+
+def _init_with_occ(self, directory, t0=0.0):
+    _orig_init(self, directory, t0)
+    self._occ_cache = {}
+
+
+Shot.__init__ = _init_with_occ
+
+LIGHT_TINT = {"golden": ((1.0, 0.7, 0.4), 0.10), "sunset": ((1.0, 0.45, 0.2), 0.2), "hold": ((1.0, 0.6, 0.3), 0.12),
+              "lab": ((0.8, 0.9, 1.0), 0.06)}
+
+
+def composite_character(ctx, shot, t, depth, draw, light="golden", feet_y=None, height=None):
+    """Draw a character into its own layer, light it to match the scene (warm wash + darker toward the feet),
+    then paint it through the occlusion mask so 3D objects in front of it hide it."""
+    ctx.push_group()
+    draw()
+    col, a = LIGHT_TINT.get(light, ((1, 1, 1), 0.0))
+    ctx.save()
+    ctx.set_operator(cairo.OPERATOR_ATOP)
+    if a > 0:
+        ctx.set_source_rgba(*col, a)
+        ctx.paint()
+    if feet_y is not None and height:
+        g = cairo.LinearGradient(0, feet_y - height, 0, feet_y)
+        g.add_color_stop_rgba(0, 0, 0, 0, 0.0)
+        g.add_color_stop_rgba(0.55, 0.05, 0.02, 0.0, 0.0)
+        g.add_color_stop_rgba(1, 0.12, 0.04, 0.0, 0.28)
+        ctx.set_source(g)
+        ctx.paint()
+    ctx.restore()
+    pat = ctx.pop_group()
+    m = shot.occ_mask(t, depth) if shot is not None else None
+    ctx.save()
+    ctx.set_source(pat)
+    if m is None:
+        ctx.paint()
+    else:
+        ctx.scale(W / m.get_width(), H / m.get_height())
+        ctx.mask_surface(m, 0, 0)
+    ctx.restore()

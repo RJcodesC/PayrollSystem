@@ -179,7 +179,7 @@ class Character:
             ctx.fill()
 
     @staticmethod
-    def _ik(root, target, l1, l2, face, bend):
+    def _ik(root, target, l1, l2, face, bend, mirror=False):
         """Two-bone IK. bend=+1: arm (forearm swings forward), -1: leg (knee forward, shin back).
         Returns (a1, a2) absolute limb angles in this rig's convention."""
         fx, dy = (target[0] - root[0]) * face, target[1] - root[1]
@@ -187,8 +187,10 @@ class Character:
         th = math.degrees(math.atan2(fx, dy))
         al = math.degrees(math.acos(max(-1.0, min(1.0, (l1 * l1 + D * D - l2 * l2) / (2 * l1 * D)))))
         a1 = th - bend * al
-        if a1 < -100:  # straight up can be written as -180 or +180: keep arms/legs in one continuous range
+        if not mirror and a1 < -100:  # straight up = -180 or +180: keep one continuous range per limb
             a1 += 360
+        if mirror and a1 > 100:  # back arm of a front-view body raises backward/outward
+            a1 -= 360
         ex = root[0] + math.sin(math.radians(a1)) * face * l1
         ey = root[1] + math.cos(math.radians(a1)) * l1
         a2 = math.degrees(math.atan2((target[0] - ex) * face, target[1] - ey))
@@ -272,6 +274,17 @@ class Character:
         tl = TORSO * lk.height
         neck = (hip[0] + tdx * tl, hip[1] + tdy * tl)
         shoulder = (hip[0] + tdx * (tl - 18), hip[1] + tdy * (tl - 18))
+        # front-facing body (ricks style): shoulders sit on the outer edges of the capsule, arms hang BESIDE
+        # the coat instead of crossing it
+        wide = lk.style == "ricks" and not lk.stick and P.get("shoulders", "wide") == "wide"
+        if wide:
+            wb = 40 * lk.width + lk.belly * 14
+            bx, by = neck[0] - tdx * (wb - 4), neck[1] - tdy * (wb - 4)
+            qx, qy = -tdy * face, tdx * face
+            off = wb - 7
+            sh = {"f": (bx + qx * off, by + qy * off + 14), "b": (bx - qx * off, by - qy * off + 14)}
+        else:
+            sh = {"f": shoulder, "b": shoulder}
 
         # legs
         hc0 = (neck[0] + tdx * (HEAD_R - 4), neck[1] + tdy * (HEAD_R - 4))
@@ -282,10 +295,13 @@ class Character:
                 P[f"{side}l"], P[f"{side}k"] = a1, a1 - a2
             tg = self._target(P[f"hand_{side}_at"], P, face, hip, neck, hc0)
             if tg is not None:
-                a1, a2 = self._ik(shoulder, tg, UPPER_ARM, FOREARM, face, 1)
+                a1, a2 = self._ik(sh[side], tg, UPPER_ARM, FOREARM, face, 1, mirror=(wide and side == "b"))
                 P[f"{side}a"], P[f"{side}b"] = a1, a2 - a1
         for side in ("b", "f"):
-            P[f"{side}a"] = _clampj(self.name, "shoulder", P[f"{side}a"], t)
+            if wide and side == "b":  # mirrored range for the back-side arm of a front-view body
+                P["ba"] = -_clampj(self.name, "shoulder", -P["ba"], t)
+            else:
+                P[f"{side}a"] = _clampj(self.name, "shoulder", P[f"{side}a"], t)
             P[f"{side}b"] = _clampj(self.name, "elbow", P[f"{side}b"], t)
             P[f"{side}l"] = _clampj(self.name, "hip", P[f"{side}l"], t)
             P[f"{side}k"] = _clampj(self.name, "knee", P[f"{side}k"], t)
@@ -294,12 +310,15 @@ class Character:
             knee, foot = self._limb(ctx, hip, a, THIGH * lk.height, a - k, SHIN * lk.height, face, LIMB_W, "boot")
             self._shoe(ctx, foot, face, a - k)
 
-        # back arm (+ prop)
-        elbow_b, hand_b = self._limb(ctx, shoulder, P["ba"], UPPER_ARM, P["ba"] + P["bb"], FOREARM, face, LIMB_W,
-                                     "sleeve")
-        if P["hold_back"]:
-            draw_prop(ctx, P["hold_back"], hand_b, face, P["prop_angle"], t)
-        self._hand(ctx, hand_b)
+        def back_arm():
+            eb, hb = self._limb(ctx, sh["b"], P["ba"], UPPER_ARM, P["ba"] + P["bb"], FOREARM, face, LIMB_W, "sleeve")
+            if P["hold_back"]:
+                draw_prop(ctx, P["hold_back"], hb, face, P["prop_angle"], t)
+            self._hand(ctx, hb)
+            return eb, hb
+
+        if not wide:  # side-view body: the back arm goes behind the torso
+            elbow_b, hand_b = back_arm()
 
         # torso / coat
         if lk.stick:
@@ -312,8 +331,10 @@ class Character:
         hc = (neck[0] + tdx * (HEAD_R - 4), neck[1] + tdy * (HEAD_R - 4))
         self._head(ctx, hc, P, t, face, mouth_open)
 
+        if wide:  # front-view body: both arms in front, one on each side
+            elbow_b, hand_b = back_arm()
         # front arm (+ prop)
-        elbow_f, hand_f = self._limb(ctx, shoulder, P["fa"], UPPER_ARM, P["fa"] + P["fb"], FOREARM, face, LIMB_W,
+        elbow_f, hand_f = self._limb(ctx, sh["f"], P["fa"], UPPER_ARM, P["fa"] + P["fb"], FOREARM, face, LIMB_W,
                                      "sleeve")
         if P["hold"]:
             draw_prop(ctx, P["hold"], hand_f, face, P["prop_angle"], t)

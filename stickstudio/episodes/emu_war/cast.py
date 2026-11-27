@@ -10,7 +10,7 @@ from engine.creatures import Emu  # noqa: E402
 KHAKI, KHAKI_D, BROWN = "#b39a62", "#8f7a48", "#6b4423"
 
 MAJOR = Character("major", Look(coat=KHAKI, coat_dark=KHAKI_D, outfit="coat", vest="#a38a55", hat="peaked",
-                                hat_color=KHAKI, hat_band="#b8333a", mustache="thick", sash=BROWN, belt=BROWN,
+                                hat_color=KHAKI, hat_band="#b8333a", mustache="thick", belt=BROWN,
                                 sleeve=KHAKI, boots="#3b2614", style="ricks"), seed=0.3)
 SGT = Character("sgt", Look(coat=KHAKI, coat_dark=KHAKI_D, outfit="coat", vest="#a38a55", hat="slouch",
                             hat_color="#9a8556", hat_band="#5d4a2a", belt=BROWN, sleeve=KHAKI, boots="#5a4a32",
@@ -26,8 +26,8 @@ EMU2 = Emu("emu2", seed=1.7)
 
 # ---------------------------------------------------------------- vetted pose library (IK targets, rig units)
 # Rule for this side-view style: hands stay clear of the torso outline and never cross the face.
-REST = dict(ba=-24, bb=10, fa=24, fb=10)                                # arms hang just outside the coat
-POINT = dict(hand_f_at=(230, 300), ba=-24, bb=10)                       # straight-arm point forward
-HANDS_UP = dict(hand_f_at=(135, 395), hand_b_at=(-125, 395))            # shock: palms up, out to the sides
-FACEPALM = dict(hand_f_at="face", ba=-24, bb=10)
-SHRUG = dict(hand_f_at=(120, 250), hand_b_at=(-62, 185))               # palms out at waist height
+REST = dict(ba=-9, bb=7, fa=9, fb=7)                                    # arms hang at the sides, beside the coat
+POINT = dict(hand_f_at=(250, 300), ba=-9, bb=7)                         # straight-arm point forward
+HANDS_UP = dict(hand_f_at=(150, 420), hand_b_at=(-150, 420))            # shock: palms up, out to the sides
+FACEPALM = dict(hand_f_at="face", ba=-9, bb=7)
+SHRUG = dict(hand_f_at=(130, 260), hand_b_at=(-130, 260))               # palms out at waist height
