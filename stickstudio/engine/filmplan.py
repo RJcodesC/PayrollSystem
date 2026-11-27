@@ -57,7 +57,10 @@ def render_shots(ep, workdir, fps=15, w=540, h=960, samples=8, only=None, smooth
         spec = {"set": sc.set_name, "module": sc.module, "light": sc.light, "out": d, "w": w, "h": h,
                 "samples": samples, "exposure": sc.exposure, "times": [i / fps for i in range(n)],
                 "cam": sc.cam_keys(), "anchors": sc.anchor_spec(), "move": sc.move_spec()}
-        key = hashlib.sha1(json.dumps(spec, sort_keys=True).encode()).hexdigest()[:12]
+        # the key covers the shot plan AND the code that builds/renders the set, so editing a set re-renders it
+        code = b"".join(open(os.path.join(ROOT, "engine3d", f), "rb").read()
+                        for f in (f"{sc.module}.py", "sets.py", "shot.py"))
+        key = hashlib.sha1(json.dumps(spec, sort_keys=True).encode() + code).hexdigest()[:12]
         stamp = os.path.join(d, "spec.key")
         if (only is None or sc.name in only) and not (os.path.exists(stamp) and open(stamp).read() == key):
             os.makedirs(d, exist_ok=True)
